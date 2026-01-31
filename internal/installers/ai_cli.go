@@ -120,7 +120,7 @@ if ! command -v npm &> /dev/null; then
 fi
 
 # Install Gemini CLI globally
-npm install -g @anthropic-ai/gemini-cli
+npm install -g @google/gemini-cli
 
 echo ""
 echo "✅ Gemini CLI installed successfully!"
@@ -135,7 +135,7 @@ echo "  3. Start coding with AI assistance!"
 		script.WriteString(`# PowerShell script for Windows
 Write-Host "💎 Installing Gemini CLI..." -ForegroundColor Cyan
 
-npm install -g @anthropic-ai/gemini-cli
+npm install -g @google/gemini-cli
 
 Write-Host "✅ Gemini CLI installed!" -ForegroundColor Green
 `)
@@ -424,7 +424,7 @@ func NewOpenCodeCLIInstaller() *OpenCodeCLIInstaller {
 }
 
 func (i *OpenCodeCLIInstaller) Dependencies() []string {
-	return []string{"node", "npm"}
+	return []string{"curl"}
 }
 
 func (i *OpenCodeCLIInstaller) GenerateInstallScript(os OS, pm PackageManager) string {
@@ -437,21 +437,21 @@ set -e
 
 echo "💻 Installing OpenCode CLI..."
 
-# Check if npm is available
-if ! command -v npm &> /dev/null; then
-    echo "❌ npm is required. Please install Node.js first."
+# Check if curl is available
+if ! command -v curl &> /dev/null; then
+    echo "❌ curl is required. Please install curl first."
     exit 1
 fi
 
-# Install OpenCode CLI globally
-npm install -g @anthropic-ai/opencode
+# Install OpenCode CLI using official installer
+curl -fsSL https://opencode.ai/install | bash
 
 echo ""
 echo "✅ OpenCode CLI installed successfully!"
 echo ""
 echo "To get started:"
 echo "  1. Run: opencode"
-echo "  2. Configure your API key"
+echo "  2. Configure your AI provider (OpenAI, Anthropic, Gemini, etc.)"
 echo "  3. Start coding with AI!"
 `)
 
@@ -459,17 +459,16 @@ echo "  3. Start coding with AI!"
 		script.WriteString(`# PowerShell script
 Write-Host "💻 Installing OpenCode CLI..." -ForegroundColor Cyan
 
-# Check npm
-if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-    Write-Host "❌ npm is required. Please install Node.js first." -ForegroundColor Red
+# Try npm method for Windows
+if (Get-Command npm -ErrorAction SilentlyContinue) {
+    npm install -g opencode-ai
+    Write-Host "✅ OpenCode CLI installed!" -ForegroundColor Green
+    Write-Host "Run 'opencode' to start"
+} else {
+    Write-Host "❌ npm is required for Windows installation. Please install Node.js first." -ForegroundColor Red
+    Write-Host "Or visit https://opencode.ai for alternative installation methods."
     exit 1
 }
-
-# Install globally
-npm install -g @anthropic-ai/opencode
-
-Write-Host "✅ OpenCode CLI installed!" -ForegroundColor Green
-Write-Host "Run 'opencode' to start"
 `)
 	}
 
@@ -511,7 +510,7 @@ func (i *GeminiCLIInstaller) IsInstalled(executor Executor) (bool, error) {
 	return err == nil, nil
 }
 func (i *GeminiCLIInstaller) GenerateUninstallScript(os OS, pm PackageManager) string {
-	return "npm uninstall -g @google/generative-ai-cli"
+	return "npm uninstall -g @google/gemini-cli"
 }
 
 // CodexCLI interface implementations
@@ -594,7 +593,7 @@ func (i *OpenCodeCLIInstaller) IsInstalled(executor Executor) (bool, error) {
 	return err == nil, nil
 }
 func (i *OpenCodeCLIInstaller) GenerateUninstallScript(os OS, pm PackageManager) string {
-	return "npm uninstall -g @anthropic-ai/opencode"
+	return "npm uninstall -g opencode-ai"
 }
 
 // Ensure all installers implement Installer interface
