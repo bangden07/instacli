@@ -404,6 +404,79 @@ echo "Configure your AI provider in Continue settings"
 }
 
 // ========================================
+// OPENCODE CLI
+// ========================================
+
+type OpenCodeCLIInstaller struct {
+	BaseInstaller
+}
+
+func NewOpenCodeCLIInstaller() *OpenCodeCLIInstaller {
+	return &OpenCodeCLIInstaller{
+		BaseInstaller: NewBaseInstaller(
+			"OpenCode CLI",
+			"Open-source AI coding assistant CLI",
+			CategoryAICLI,
+			"💻",
+			[]OS{OSLinux, OSMacOS, OSWindows},
+		),
+	}
+}
+
+func (i *OpenCodeCLIInstaller) Dependencies() []string {
+	return []string{"node", "npm"}
+}
+
+func (i *OpenCodeCLIInstaller) GenerateInstallScript(os OS, pm PackageManager) string {
+	var script strings.Builder
+
+	switch os {
+	case OSLinux, OSMacOS:
+		script.WriteString(`#!/bin/bash
+set -e
+
+echo "💻 Installing OpenCode CLI..."
+
+# Check if npm is available
+if ! command -v npm &> /dev/null; then
+    echo "❌ npm is required. Please install Node.js first."
+    exit 1
+fi
+
+# Install OpenCode CLI globally
+npm install -g @anthropic-ai/opencode
+
+echo ""
+echo "✅ OpenCode CLI installed successfully!"
+echo ""
+echo "To get started:"
+echo "  1. Run: opencode"
+echo "  2. Configure your API key"
+echo "  3. Start coding with AI!"
+`)
+
+	case OSWindows:
+		script.WriteString(`# PowerShell script
+Write-Host "💻 Installing OpenCode CLI..." -ForegroundColor Cyan
+
+# Check npm
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+    Write-Host "❌ npm is required. Please install Node.js first." -ForegroundColor Red
+    exit 1
+}
+
+# Install globally
+npm install -g @anthropic-ai/opencode
+
+Write-Host "✅ OpenCode CLI installed!" -ForegroundColor Green
+Write-Host "Run 'opencode' to start"
+`)
+	}
+
+	return script.String()
+}
+
+// ========================================
 // INTERFACE IMPLEMENTATIONS
 // ========================================
 
@@ -507,6 +580,23 @@ func (i *ContinueInstaller) GenerateUninstallScript(os OS, pm PackageManager) st
 	return "code --uninstall-extension continue.continue"
 }
 
+// OpenCode CLI interface implementations
+func (i *OpenCodeCLIInstaller) RequiredPackageManagers() []PackageManager { return nil }
+func (i *OpenCodeCLIInstaller) Install(executor Executor) error {
+	return executor.RunWithProgress(i.GenerateInstallScript(executor.GetOS(), executor.GetPackageManager()), nil)
+}
+func (i *OpenCodeCLIInstaller) Uninstall(executor Executor) error {
+	_, err := executor.Run(i.GenerateUninstallScript(executor.GetOS(), executor.GetPackageManager()))
+	return err
+}
+func (i *OpenCodeCLIInstaller) IsInstalled(executor Executor) (bool, error) {
+	_, err := executor.Run("opencode --version")
+	return err == nil, nil
+}
+func (i *OpenCodeCLIInstaller) GenerateUninstallScript(os OS, pm PackageManager) string {
+	return "npm uninstall -g @anthropic-ai/opencode"
+}
+
 // Ensure all installers implement Installer interface
 var _ Installer = (*ClaudeCLIInstaller)(nil)
 var _ Installer = (*GeminiCLIInstaller)(nil)
@@ -514,3 +604,4 @@ var _ Installer = (*CodexCLIInstaller)(nil)
 var _ Installer = (*AiderInstaller)(nil)
 var _ Installer = (*KiloCodeInstaller)(nil)
 var _ Installer = (*ContinueInstaller)(nil)
+var _ Installer = (*OpenCodeCLIInstaller)(nil)

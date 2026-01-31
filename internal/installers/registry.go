@@ -68,6 +68,7 @@ func DefaultRegistry() *Registry {
 	r.Register(NewAiderInstaller())
 	r.Register(NewKiloCodeInstaller())
 	r.Register(NewContinueInstaller())
+	r.Register(NewOpenCodeCLIInstaller())
 
 	// MCP Servers
 	r.Register(NewContext7MCPInstaller())
