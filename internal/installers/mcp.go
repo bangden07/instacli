@@ -664,10 +664,8 @@ configure_opencode_mcp() {
 # Always configure OpenCode (user selected this MCP target)
 configure_opencode_mcp "$HOME_DIR/.config/opencode/opencode.json"
 
-# Configure for Gemini CLI
-if [ -d "$HOME_DIR/.gemini" ]; then
-    configure_mcp "$HOME_DIR/.gemini/settings.json" "Gemini CLI"
-fi
+# Always configure for Gemini CLI (user selected this MCP target)
+configure_mcp "$HOME_DIR/.gemini/settings.json" "Gemini CLI"
 
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -796,11 +794,9 @@ $OpenCodeConfig = "$HomeDir\.config\opencode\opencode.json"
 # Always configure OpenCode (user selected this MCP target)
 Configure-OpenCodeMCP $OpenCodeConfig
 
-# Configure for Gemini CLI
+# Always configure for Gemini CLI (user selected this MCP target)
 $GeminiConfig = "$HomeDir\.gemini\settings.json"
-if (Test-Path "$HomeDir\.gemini") {
-    Configure-MCP $GeminiConfig "Gemini CLI"
-}
+Configure-MCP $GeminiConfig "Gemini CLI"
 
 Write-Host ""
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
