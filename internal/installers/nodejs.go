@@ -29,6 +29,14 @@ func (n *NodeJSInstaller) WithVersion(version string) *NodeJSInstaller {
 	return n
 }
 
+// getNvmInstallCmd returns the correct nvm install command based on version
+func (n *NodeJSInstaller) getNvmInstallCmd() string {
+	if n.version == "lts" {
+		return "nvm install --lts && nvm use --lts"
+	}
+	return fmt.Sprintf("nvm install %s && nvm use %s", n.version, n.version)
+}
+
 func (n *NodeJSInstaller) Dependencies() []string {
 	return []string{"curl", "git"}
 }
@@ -80,9 +88,8 @@ fi
 
 # Install Node.js
 echo "Installing Node.js %s..."
-nvm install %s
-nvm use %s
-nvm alias default %s
+%s
+nvm alias default node
 
 # Verify installation
 echo ""
@@ -98,7 +105,7 @@ npm install -g pnpm yarn
 echo ""
 echo "🎉 Setup complete!"
 echo "Available commands: node, npm, npx, pnpm, yarn"
-`, n.version, n.version, n.version, n.version))
+`, n.version, n.getNvmInstallCmd()))
 
 	case OSWindows:
 		script.WriteString(fmt.Sprintf(`# PowerShell script for Windows
