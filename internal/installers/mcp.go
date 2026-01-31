@@ -689,7 +689,7 @@ echo '    }'
 echo '  }'
 echo '}'
 echo ""
-`, name, pkg, name, name, pkg, name, name, pkg, name, name, pkg))
+`, pkg, pkg, name, name, pkg, name, name, pkg, name, name, pkg, pkg))
 
 	case OSWindows:
 		script.WriteString(fmt.Sprintf(`# PowerShell
@@ -810,7 +810,7 @@ Write-Host "📁 VS Code/Cline:  %%APPDATA%%\Code\User\mcp.json"
 Write-Host "📁 OpenCode:       %%USERPROFILE%%\.config\opencode\opencode.json"
 Write-Host "📁 Gemini CLI:     %%USERPROFILE%%\.gemini\settings.json"
 Write-Host ""
-`, name, pkg, name, name, pkg, name, name, pkg, name))
+`, pkg, pkg, name, name, pkg, name, name, pkg, name))
 	}
 
 	return script.String()
