@@ -26,13 +26,20 @@ const (
 type Category string
 
 const (
-	CategoryWebServer  Category = "Web Server Stack"
-	CategoryRuntime    Category = "Runtime & Languages"
-	CategoryContainer  Category = "Containers"
-	CategoryDatabase   Category = "Databases"
-	CategoryFramework  Category = "Frameworks"
-	CategoryAutomation Category = "Automation"
-	CategorySecurity   Category = "Security"
+	CategoryWebServer      Category = "Web Server Stack"
+	CategoryRuntime        Category = "Runtime & Languages"
+	CategoryContainer      Category = "Containers"
+	CategoryDatabase       Category = "Databases"
+	CategoryFramework      Category = "Frameworks"
+	CategoryAutomation     Category = "Automation"
+	CategorySecurity       Category = "Security"
+	CategoryMonitoring     Category = "Monitoring"
+	CategoryInfrastructure Category = "Infrastructure"
+	CategoryCICD           Category = "CI/CD"
+	CategoryDNS            Category = "DNS & Network"
+	CategoryCMS            Category = "CMS & Blog"
+	CategoryBackup         Category = "Backup"
+	CategoryVPN            Category = "VPN"
 )
 
 // Installer is the interface all installers must implement

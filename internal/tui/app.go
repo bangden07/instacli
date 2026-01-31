@@ -101,6 +101,13 @@ func NewApp() *App {
 		{"Frameworks", "Laravel Kit, Next.js Kit", "🔧", installers.CategoryFramework},
 		{"Automation", "N8N, Coolify, PM2", "🤖", installers.CategoryAutomation},
 		{"Security", "UFW, Certbot SSL, Fail2ban", "🛡️", installers.CategorySecurity},
+		{"Monitoring", "Prometheus, Grafana, Netdata", "📊", installers.CategoryMonitoring},
+		{"Infrastructure", "Nginx Proxy Manager, Traefik, MinIO", "🔀", installers.CategoryInfrastructure},
+		{"VPN", "WireGuard VPN", "🔐", installers.CategoryVPN},
+		{"CI/CD", "Jenkins, GitLab Runner, GitHub Actions", "🚀", installers.CategoryCICD},
+		{"DNS & Network", "Pi-hole ad blocker", "🕳️", installers.CategoryDNS},
+		{"CMS & Blog", "WordPress, Ghost", "📝", installers.CategoryCMS},
+		{"Backup", "Restic backup", "💾", installers.CategoryBackup},
 		{"Settings", "SSH Config, Preferences", "⚙️", ""},
 	}
 

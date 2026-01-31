@@ -33,6 +33,34 @@ func DefaultRegistry() *Registry {
 	r.Register(NewCertbotInstaller())
 	r.Register(NewFail2banInstaller())
 
+	// Monitoring
+	r.Register(NewPrometheusInstaller())
+	r.Register(NewGrafanaInstaller())
+	r.Register(NewNetdataInstaller())
+
+	// Infrastructure
+	r.Register(NewNginxProxyManagerInstaller())
+	r.Register(NewTraefikInstaller())
+	r.Register(NewMinIOInstaller())
+
+	// VPN
+	r.Register(NewWireGuardInstaller())
+
+	// CI/CD
+	r.Register(NewJenkinsInstaller())
+	r.Register(NewGitLabRunnerInstaller())
+	r.Register(NewGitHubActionsRunnerInstaller())
+
+	// DNS & Network
+	r.Register(NewPiholeInstaller())
+
+	// CMS & Blog
+	r.Register(NewWordPressInstaller())
+	r.Register(NewGhostInstaller())
+
+	// Backup
+	r.Register(NewResticInstaller())
+
 	return r
 }
 
