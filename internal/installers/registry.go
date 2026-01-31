@@ -1,0 +1,47 @@
+package installers
+
+// DefaultRegistry returns a registry with all available installers
+func DefaultRegistry() *Registry {
+	r := NewRegistry()
+
+	// Containers
+	r.Register(NewDockerInstaller())
+
+	// Runtime & Languages
+	r.Register(NewNodeJSInstaller())
+	r.Register(NewGolangInstaller())
+
+	// Web Servers
+	r.Register(NewLAMPInstaller())
+	r.Register(NewLEMPInstaller())
+
+	// Databases
+	r.Register(NewMySQLInstaller())
+	r.Register(NewPostgreSQLInstaller())
+	r.Register(NewMongoDBInstaller())
+	r.Register(NewRedisInstaller())
+
+	// Automation
+	r.Register(NewN8NInstaller())
+
+	// Frameworks
+	r.Register(NewLaravelKitInstaller())
+	r.Register(NewNextJSKitInstaller())
+
+	// Security
+	r.Register(NewUFWInstaller())
+	r.Register(NewCertbotInstaller())
+	r.Register(NewFail2banInstaller())
+
+	return r
+}
+
+// CategoryInstallers returns a grouped map of installers by category
+func CategoryInstallers(r *Registry) map[Category][]Installer {
+	result := make(map[Category][]Installer)
+	for _, inst := range r.All() {
+		cat := inst.Category()
+		result[cat] = append(result[cat], inst)
+	}
+	return result
+}

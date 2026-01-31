@@ -1,0 +1,39 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+instacli
+instacli-*
+
+# Test binary
+*.test
+
+# Output of go coverage
+*.out
+
+# Build artifacts
+dist/
+build/
+
+# Generated scripts
+scripts/generated/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Go workspace
+go.work
+
+# Environment
+.env
+.env.local
