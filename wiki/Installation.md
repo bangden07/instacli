@@ -51,8 +51,20 @@ sudo mv instacli /usr/local/bin/
 ## ✅ Verify Installation
 
 ```bash
-./instacli --version
-# Output: InstaCli v1.2.0
+instacli --version
+# Output: InstaCli v1.2.5
+```
+
+## 🔄 Auto-Update
+
+InstaCli can update itself! No need to run the install script again.
+
+```bash
+# Check if update is available
+instacli --check-update
+
+# Update to latest version
+instacli --update
 ```
 
 ## 🔧 System Requirements
@@ -88,3 +100,4 @@ sudo mv instacli /usr/local/bin/
 ---
 
 **Next:** [[Quick Start]] →
+

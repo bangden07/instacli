@@ -1,7 +1,7 @@
 # 🚀 InstaCli
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.2.0-blue.svg" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.2.5-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/go-%3E%3D1.21-00ADD8.svg" alt="Go Version">
   <img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License">
   <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey.svg" alt="Platform">
@@ -89,10 +89,20 @@ Download the latest release from [GitHub Releases](https://github.com/bangden07/
 
 ## 🚀 Usage
 
-### Run the TUI
+### CLI Commands
 
 ```bash
-./instacli
+# Run the TUI
+instacli
+
+# Check current version
+instacli --version
+
+# Check for updates
+instacli --check-update
+
+# Auto-update to latest version
+instacli --update
 ```
 
 ### Keyboard Shortcuts
@@ -169,10 +179,26 @@ instacli/
 
 ---
 
+## 🔄 Auto-Update
+
+InstaCli can update itself! No need to run the install script again.
+
+```bash
+# Check if update is available
+instacli --check-update
+
+# Update to latest version
+instacli --update
+```
+
+---
+
 ## 🏷️ Version History
 
 | Version | Date | Changes |
 | ------- | ---- | ------- |
+| v1.2.5 | 2026-01-31 | Auto-update feature |
+| v1.2.4 | 2026-01-31 | Fix SSH remote installation |
 | v1.2.0 | 2026-01-31 | Clone & Setup feature |
 | v1.1.0 | 2026-01-31 | 13 new installers (28 total) |
 | v1.0.0 | 2026-01-31 | Initial release (15 installers) |
