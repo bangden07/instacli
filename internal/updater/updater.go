@@ -91,8 +91,11 @@ func CheckForUpdate() UpdateResult {
 // SelfUpdate downloads and replaces the current binary
 func SelfUpdate(downloadURL string) error {
 	if downloadURL == "" {
-		return fmt.Errorf("no download URL provided")
+		return fmt.Errorf("no download URL available for platform %s/%s. Check releases at https://github.com/%s/%s/releases",
+			runtime.GOOS, runtime.GOARCH, repoOwner, repoName)
 	}
+
+	fmt.Printf("📥 Downloading from: %s\n", downloadURL)
 
 	// Get current executable path
 	execPath, err := os.Executable()
@@ -103,6 +106,8 @@ func SelfUpdate(downloadURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve symlinks: %w", err)
 	}
+
+	fmt.Printf("📍 Current binary: %s\n", execPath)
 
 	// Download new binary
 	client := &http.Client{Timeout: 120 * time.Second}
@@ -116,41 +121,46 @@ func SelfUpdate(downloadURL string) error {
 		return fmt.Errorf("download failed with status %d", resp.StatusCode)
 	}
 
-	// Create temp file
-	tmpFile, err := os.CreateTemp(filepath.Dir(execPath), "instacli-update-*")
+	// Read into memory first to ensure complete download
+	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-
-	// Write downloaded content
-	_, err = io.Copy(tmpFile, resp.Body)
-	tmpFile.Close()
-	if err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("failed to write update: %w", err)
+		return fmt.Errorf("failed to read update data: %w", err)
 	}
 
-	// Make executable (Unix)
-	if runtime.GOOS != "windows" {
-		if err := os.Chmod(tmpPath, 0755); err != nil {
-			os.Remove(tmpPath)
-			return fmt.Errorf("failed to set permissions: %w", err)
-		}
+	fmt.Printf("📦 Downloaded %d bytes\n", len(data))
+
+	if len(data) < 1000 {
+		return fmt.Errorf("downloaded file too small (%d bytes), likely an error page", len(data))
+	}
+
+	// Create temp file in same directory
+	tmpPath := execPath + ".new"
+	if err := os.WriteFile(tmpPath, data, 0755); err != nil {
+		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 
 	// Backup old binary
 	backupPath := execPath + ".bak"
+	os.Remove(backupPath) // Remove old backup if exists
+
 	if err := os.Rename(execPath, backupPath); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("failed to backup old binary: %w", err)
 	}
 
-	// Move new binary
+	// Move new binary to executable path
 	if err := os.Rename(tmpPath, execPath); err != nil {
 		// Restore backup on failure
 		os.Rename(backupPath, execPath)
+		os.Remove(tmpPath)
 		return fmt.Errorf("failed to install new binary: %w", err)
+	}
+
+	// Make executable (Unix)
+	if runtime.GOOS != "windows" {
+		if err := os.Chmod(execPath, 0755); err != nil {
+			fmt.Printf("⚠️ Warning: failed to set permissions: %v\n", err)
+		}
 	}
 
 	// Remove backup
