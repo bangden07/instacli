@@ -580,21 +580,20 @@ configure_mcp() {
     local config_file="$1"
     local ide_name="$2"
     
-    if [ -f "$config_file" ]; then
-        # File exists, merge config
-        echo "📝 Updating $ide_name MCP config..."
-        # Check if already configured
+    mkdir -p "$(dirname "$config_file")"
+    
+    if [ -f "$config_file" ] && [ -s "$config_file" ]; then
+        # File exists and not empty
         if grep -q '"%s"' "$config_file" 2>/dev/null; then
             echo "   Already configured in $ide_name"
         else
-            # Create backup and merge
+            # Backup and overwrite (merging JSON is complex in bash)
             cp "$config_file" "$config_file.bak"
-            # Simple append to mcpServers (user may need to fix JSON)
-            echo "   Added to $ide_name (check $config_file)"
+            echo "$MCP_CONFIG" > "$config_file"
+            echo "✅ Updated $ide_name config (backup: $config_file.bak)"
         fi
     else
         # Create new config
-        mkdir -p "$(dirname "$config_file")"
         echo "$MCP_CONFIG" > "$config_file"
         echo "✅ Created $ide_name config: $config_file"
     fi
@@ -646,16 +645,20 @@ OPENCODE_MCP_CONFIG='{
 configure_opencode_mcp() {
     local config_file="$1"
     
-    if [ -f "$config_file" ]; then
-        echo "📝 Updating OpenCode MCP config..."
+    mkdir -p "$(dirname "$config_file")"
+    
+    if [ -f "$config_file" ] && [ -s "$config_file" ]; then
+        # File exists and not empty
         if grep -q '"%s"' "$config_file" 2>/dev/null; then
             echo "   Already configured in OpenCode"
         else
+            # Backup and overwrite
             cp "$config_file" "$config_file.bak"
-            echo "   Added to OpenCode (check $config_file)"
+            echo "$OPENCODE_MCP_CONFIG" > "$config_file"
+            echo "✅ Updated OpenCode config (backup: $config_file.bak)"
         fi
     else
-        mkdir -p "$(dirname "$config_file")"
+        # Create new config
         echo "$OPENCODE_MCP_CONFIG" > "$config_file"
         echo "✅ Created OpenCode config: $config_file"
     fi
@@ -717,18 +720,21 @@ $McpConfig = @'
 function Configure-MCP {
     param($ConfigFile, $IdeName)
     
-    if (Test-Path $ConfigFile) {
+    $ParentDir = Split-Path $ConfigFile -Parent
+    if (!(Test-Path $ParentDir)) {
+        New-Item -ItemType Directory -Path $ParentDir -Force | Out-Null
+    }
+    
+    if ((Test-Path $ConfigFile) -and ((Get-Item $ConfigFile).Length -gt 0)) {
         if (Select-String -Path $ConfigFile -Pattern '"%s"' -Quiet) {
             Write-Host "   Already configured in $IdeName"
         } else {
-            Write-Host "📝 Check $IdeName config: $ConfigFile"
+            Copy-Item $ConfigFile "$ConfigFile.bak"
+            $McpConfig | Out-File -FilePath $ConfigFile -Encoding utf8 -Force
+            Write-Host "✅ Updated $IdeName config (backup: $ConfigFile.bak)" -ForegroundColor Green
         }
     } else {
-        $ParentDir = Split-Path $ConfigFile -Parent
-        if (!(Test-Path $ParentDir)) {
-            New-Item -ItemType Directory -Path $ParentDir -Force | Out-Null
-        }
-        $McpConfig | Out-File -FilePath $ConfigFile -Encoding utf8
+        $McpConfig | Out-File -FilePath $ConfigFile -Encoding utf8 -Force
         Write-Host "✅ Created $IdeName config: $ConfigFile" -ForegroundColor Green
     }
 }
@@ -771,20 +777,21 @@ $OpenCodeMcpConfig = @'
 function Configure-OpenCodeMCP {
     param([string]$ConfigFile)
     
-    if (Test-Path $ConfigFile) {
-        Write-Host "📝 Updating OpenCode MCP config..."
+    $parentDir = Split-Path $ConfigFile -Parent
+    if (-not (Test-Path $parentDir)) {
+        New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+    }
+    
+    if ((Test-Path $ConfigFile) -and ((Get-Item $ConfigFile).Length -gt 0)) {
         $content = Get-Content $ConfigFile -Raw -ErrorAction SilentlyContinue
         if ($content -match '"%s"') {
             Write-Host "   Already configured in OpenCode"
         } else {
             Copy-Item $ConfigFile "$ConfigFile.bak"
-            Write-Host "   Added to OpenCode (check $ConfigFile)"
+            $OpenCodeMcpConfig | Out-File -FilePath $ConfigFile -Encoding UTF8 -Force
+            Write-Host "✅ Updated OpenCode config (backup: $ConfigFile.bak)" -ForegroundColor Green
         }
     } else {
-        $parentDir = Split-Path $ConfigFile -Parent
-        if (-not (Test-Path $parentDir)) {
-            New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
-        }
         $OpenCodeMcpConfig | Out-File -FilePath $ConfigFile -Encoding UTF8 -Force
         Write-Host "✅ Created OpenCode config: $ConfigFile" -ForegroundColor Green
     }
