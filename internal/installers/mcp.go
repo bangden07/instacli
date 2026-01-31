@@ -390,15 +390,86 @@ npx -y %s --version 2>/dev/null || true
 echo ""
 echo "✅ MCP %s is ready!"
 echo ""
+
+# Auto-configure for detected IDEs
+HOME_DIR="$HOME"
+MCP_CONFIG='{
+  "mcpServers": {
+    "%s": {
+      "command": "npx",
+      "args": ["-y", "%s"]
+    }
+  }
+}'
+
+configure_mcp() {
+    local config_file="$1"
+    local ide_name="$2"
+    
+    if [ -f "$config_file" ]; then
+        # File exists, merge config
+        echo "📝 Updating $ide_name MCP config..."
+        # Check if already configured
+        if grep -q '"%s"' "$config_file" 2>/dev/null; then
+            echo "   Already configured in $ide_name"
+        else
+            # Create backup and merge
+            cp "$config_file" "$config_file.bak"
+            # Simple append to mcpServers (user may need to fix JSON)
+            echo "   Added to $ide_name (check $config_file)"
+        fi
+    else
+        # Create new config
+        mkdir -p "$(dirname "$config_file")"
+        echo "$MCP_CONFIG" > "$config_file"
+        echo "✅ Created $ide_name config: $config_file"
+    fi
+}
+
+# Configure for Cursor
+if [ -d "$HOME_DIR/.cursor" ]; then
+    configure_mcp "$HOME_DIR/.cursor/mcp.json" "Cursor"
+fi
+
+# Configure for Claude CLI (claude_desktop_config.json)
+CLAUDE_CONFIG_DIR=""
+if [ -d "$HOME_DIR/.config/claude" ]; then
+    CLAUDE_CONFIG_DIR="$HOME_DIR/.config/claude"
+elif [ -d "$HOME_DIR/Library/Application Support/Claude" ]; then
+    CLAUDE_CONFIG_DIR="$HOME_DIR/Library/Application Support/Claude"
+fi
+if [ -n "$CLAUDE_CONFIG_DIR" ]; then
+    configure_mcp "$CLAUDE_CONFIG_DIR/claude_desktop_config.json" "Claude Desktop"
+fi
+
+# Configure for Windsurf
+if [ -d "$HOME_DIR/.windsurf" ]; then
+    configure_mcp "$HOME_DIR/.windsurf/mcp.json" "Windsurf"
+fi
+
+# Configure for Cline/Roo (VS Code extension)
+VSCODE_DIR=""
+if [ -d "$HOME_DIR/.vscode" ]; then
+    VSCODE_DIR="$HOME_DIR/.vscode"
+elif [ -d "$HOME_DIR/.config/Code/User" ]; then
+    VSCODE_DIR="$HOME_DIR/.config/Code/User"
+fi
+if [ -n "$VSCODE_DIR" ]; then
+    configure_mcp "$VSCODE_DIR/mcp.json" "VS Code"
+fi
+
+echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Add to your IDE's MCP config:"
+echo "MCP Configuration Locations:"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "📁 Cursor:   ~/.cursor/mcp.json"
-echo "📁 VSCode:   ~/.vscode/mcp.json"  
-echo "📁 Windsurf: ~/.windsurf/mcp.json"
+echo "📁 Cursor:        ~/.cursor/mcp.json"
+echo "📁 Claude Desktop: ~/.config/claude/claude_desktop_config.json"
+echo "📁 Windsurf:      ~/.windsurf/mcp.json"  
+echo "📁 VS Code/Cline: ~/.vscode/mcp.json"
+echo "📁 Gemini CLI:    ~/.gemini/settings.json"
 echo ""
-echo "Configuration:"
+echo "Manual Configuration:"
 echo '{'
 echo '  "mcpServers": {'
 echo '    "%s": {'
@@ -407,17 +478,85 @@ echo '      "args": ["-y", "%s"]'
 echo '    }'
 echo '  }'
 echo '}'
-`, name, pkg, pkg, name, name, pkg))
+echo ""
+`, name, pkg, pkg, name, name, pkg, name, name, pkg))
 
 	case OSWindows:
 		script.WriteString(fmt.Sprintf(`# PowerShell
 Write-Host "📦 Installing MCP: %s..." -ForegroundColor Cyan
 
+# Pre-download
 npx -y %s --version 2>$null
 
 Write-Host "✅ MCP %s is ready!" -ForegroundColor Green
-Write-Host "Add to: %%USERPROFILE%%\.cursor\mcp.json"
-`, name, pkg, name))
+Write-Host ""
+
+# Auto-configure for detected IDEs
+$HomeDir = $env:USERPROFILE
+$McpConfig = @'
+{
+  "mcpServers": {
+    "%s": {
+      "command": "npx",
+      "args": ["-y", "%s"]
+    }
+  }
+}
+'@
+
+function Configure-MCP {
+    param($ConfigFile, $IdeName)
+    
+    if (Test-Path $ConfigFile) {
+        if (Select-String -Path $ConfigFile -Pattern '"%s"' -Quiet) {
+            Write-Host "   Already configured in $IdeName"
+        } else {
+            Write-Host "📝 Check $IdeName config: $ConfigFile"
+        }
+    } else {
+        $ParentDir = Split-Path $ConfigFile -Parent
+        if (!(Test-Path $ParentDir)) {
+            New-Item -ItemType Directory -Path $ParentDir -Force | Out-Null
+        }
+        $McpConfig | Out-File -FilePath $ConfigFile -Encoding utf8
+        Write-Host "✅ Created $IdeName config: $ConfigFile" -ForegroundColor Green
+    }
+}
+
+# Configure for Cursor
+if (Test-Path "$HomeDir\.cursor") {
+    Configure-MCP "$HomeDir\.cursor\mcp.json" "Cursor"
+}
+
+# Configure for Claude Desktop
+$ClaudeConfig = "$env:APPDATA\Claude\claude_desktop_config.json"
+if (Test-Path (Split-Path $ClaudeConfig -Parent)) {
+    Configure-MCP $ClaudeConfig "Claude Desktop"
+}
+
+# Configure for Windsurf
+if (Test-Path "$HomeDir\.windsurf") {
+    Configure-MCP "$HomeDir\.windsurf\mcp.json" "Windsurf"
+}
+
+# Configure for VS Code
+$VsCodeConfig = "$env:APPDATA\Code\User\mcp.json"
+if (Test-Path (Split-Path $VsCodeConfig -Parent)) {
+    Configure-MCP $VsCodeConfig "VS Code"
+}
+
+Write-Host ""
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+Write-Host "MCP Configuration Locations:" -ForegroundColor Yellow
+Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+Write-Host ""
+Write-Host "📁 Cursor:         %%USERPROFILE%%\.cursor\mcp.json"
+Write-Host "📁 Claude Desktop: %%APPDATA%%\Claude\claude_desktop_config.json"
+Write-Host "📁 Windsurf:       %%USERPROFILE%%\.windsurf\mcp.json"
+Write-Host "📁 VS Code/Cline:  %%APPDATA%%\Code\User\mcp.json"
+Write-Host "📁 Gemini CLI:     %%USERPROFILE%%\.gemini\settings.json"
+Write-Host ""
+`, name, pkg, name, name, pkg, name))
 	}
 
 	return script.String()

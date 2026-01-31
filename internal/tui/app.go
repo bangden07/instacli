@@ -73,6 +73,7 @@ type App struct {
 	categoryItems     []CategoryItem
 	installerItems    []InstallerItem
 	cursor            int
+	scrollOffset      int // For scrolling long lists
 	selectedCategory  string
 	selectedInstaller installers.Installer
 	registry          *installers.Registry
@@ -170,6 +171,7 @@ func NewApp() *App {
 		targetMode:    TargetLocal,
 		categoryItems: categories,
 		cursor:        0,
+		scrollOffset:  0,
 		registry:      installers.DefaultRegistry(),
 		sysCheck:      sysCheck,
 		sshHost:       sshHost,
@@ -177,6 +179,8 @@ func NewApp() *App {
 		sshUser:       sshUser,
 		sshPass:       sshPass,
 		repoURL:       repoURL,
+		width:         100, // Default width, will be updated by WindowSizeMsg
+		height:        40,  // Default height, will be updated by WindowSizeMsg
 	}
 }
 
@@ -730,10 +734,52 @@ func (a *App) renderMainMenu(width int) string {
 	b.WriteString(title)
 	b.WriteString("\n")
 
-	// Compact menu - single line per item
-	for i, cat := range a.categoryItems {
+	// Calculate visible items based on terminal height
+	// Reserve space for header (~10 lines), footer (~5 lines), and description (2 lines)
+	reservedLines := 17
+	if a.height < 35 {
+		reservedLines = 12 // Compact mode needs less
+	}
+	maxVisibleItems := a.height - reservedLines
+	if maxVisibleItems < 5 {
+		maxVisibleItems = 5
+	}
+	if maxVisibleItems > len(a.categoryItems) {
+		maxVisibleItems = len(a.categoryItems)
+	}
+
+	// Update scroll offset to keep cursor visible
+	if a.cursor < a.scrollOffset {
+		a.scrollOffset = a.cursor
+	}
+	if a.cursor >= a.scrollOffset+maxVisibleItems {
+		a.scrollOffset = a.cursor - maxVisibleItems + 1
+	}
+
+	// Show scroll indicator at top if needed
+	if a.scrollOffset > 0 {
+		b.WriteString(lipgloss.NewStyle().Foreground(Muted).Render("   ▲ scroll up for more\n"))
+	}
+
+	// Render visible items with scrolling
+	endIdx := a.scrollOffset + maxVisibleItems
+	if endIdx > len(a.categoryItems) {
+		endIdx = len(a.categoryItems)
+	}
+
+	for i := a.scrollOffset; i < endIdx; i++ {
+		cat := a.categoryItems[i]
 		icon := cat.icon
 		name := cat.title
+
+		// Truncate name if terminal is too narrow
+		maxNameLen := width - 10
+		if maxNameLen < 20 {
+			maxNameLen = 20
+		}
+		if len(name) > maxNameLen {
+			name = name[:maxNameLen-3] + "..."
+		}
 
 		if i == a.cursor {
 			// Selected item - highlight
@@ -749,11 +795,27 @@ func (a *App) renderMainMenu(width int) string {
 		b.WriteString("\n")
 	}
 
+	// Show scroll indicator at bottom if needed
+	if endIdx < len(a.categoryItems) {
+		b.WriteString(lipgloss.NewStyle().Foreground(Muted).Render("   ▼ scroll down for more\n"))
+	}
+
 	// Show description of selected item at bottom
 	if a.cursor < len(a.categoryItems) {
 		desc := a.categoryItems[a.cursor].description
+		// Truncate description if too long
+		maxDescLen := width - 6
+		if len(desc) > maxDescLen {
+			desc = desc[:maxDescLen-3] + "..."
+		}
 		b.WriteString("\n")
 		b.WriteString(SubtitleStyle.Render(fmt.Sprintf("  → %s", desc)))
+	}
+
+	// Show scroll position indicator for large lists
+	if len(a.categoryItems) > maxVisibleItems {
+		scrollInfo := fmt.Sprintf(" [%d/%d]", a.cursor+1, len(a.categoryItems))
+		b.WriteString(lipgloss.NewStyle().Foreground(Muted).Render(scrollInfo))
 	}
 
 	return b.String()
@@ -776,11 +838,58 @@ func (a *App) renderCategoryView(width int) string {
 		return b.String()
 	}
 
-	for i, item := range a.installerItems {
+	// Calculate visible items based on terminal height
+	// Each item takes 2 lines (name + description)
+	reservedLines := 20
+	if a.height < 35 {
+		reservedLines = 15
+	}
+	maxVisibleItems := (a.height - reservedLines) / 2 // Each item is 2 lines
+	if maxVisibleItems < 3 {
+		maxVisibleItems = 3
+	}
+	if maxVisibleItems > len(a.installerItems) {
+		maxVisibleItems = len(a.installerItems)
+	}
+
+	// Update scroll offset
+	if a.cursor < a.scrollOffset {
+		a.scrollOffset = a.cursor
+	}
+	if a.cursor >= a.scrollOffset+maxVisibleItems {
+		a.scrollOffset = a.cursor - maxVisibleItems + 1
+	}
+
+	// Scroll indicator top
+	if a.scrollOffset > 0 {
+		b.WriteString(lipgloss.NewStyle().Foreground(Muted).Render("   ▲ scroll up for more\n"))
+	}
+
+	// Render visible items
+	endIdx := a.scrollOffset + maxVisibleItems
+	if endIdx > len(a.installerItems) {
+		endIdx = len(a.installerItems)
+	}
+
+	for i := a.scrollOffset; i < endIdx; i++ {
+		item := a.installerItems[i]
 		inst := item.installer
 		icon := inst.Icon()
 		name := inst.Name()
 		desc := inst.Description()
+
+		// Truncate for narrow terminals
+		maxNameLen := width - 12
+		if maxNameLen < 20 {
+			maxNameLen = 20
+		}
+		if len(name) > maxNameLen {
+			name = name[:maxNameLen-3] + "..."
+		}
+		maxDescLen := width - 10
+		if len(desc) > maxDescLen {
+			desc = desc[:maxDescLen-3] + "..."
+		}
 
 		var itemStyle lipgloss.Style
 		cursor := "  "
@@ -807,6 +916,17 @@ func (a *App) renderCategoryView(width int) string {
 		b.WriteString("\n")
 		b.WriteString(descLine)
 		b.WriteString("\n")
+	}
+
+	// Scroll indicator bottom
+	if endIdx < len(a.installerItems) {
+		b.WriteString(lipgloss.NewStyle().Foreground(Muted).Render("   ▼ scroll down for more\n"))
+	}
+
+	// Show scroll position indicator
+	if len(a.installerItems) > maxVisibleItems {
+		scrollInfo := fmt.Sprintf(" [%d/%d]", a.cursor+1, len(a.installerItems))
+		b.WriteString(lipgloss.NewStyle().Foreground(Muted).Render(scrollInfo))
 	}
 
 	return b.String()
