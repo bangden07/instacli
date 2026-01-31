@@ -29,6 +29,7 @@ const (
 	ViewSystemStatus
 	ViewHelp
 	ViewCloneSetup
+	ViewInstalling
 )
 
 // TargetMode represents local or SSH
@@ -87,6 +88,22 @@ type App struct {
 	hue               float64 // For RGB animation (0-360)
 	repoURL           textinput.Model
 	detectedProject   *executor.ProjectInfo
+	// Installation progress
+	installLog       []string
+	installRunning   bool
+	installComplete  bool
+	installError     error
+	installStartTime time.Time
+}
+
+// installOutputMsg for receiving install output
+type installOutputMsg struct {
+	line string
+}
+
+// installDoneMsg when install completes
+type installDoneMsg struct {
+	err error
 }
 
 // tickMsg for animation
@@ -205,6 +222,26 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Update hue for rainbow effect
 		a.hue = math.Mod(a.hue+3, 360)
 		return a, tick()
+
+	case installOutputMsg:
+		// Append install output line
+		a.installLog = append(a.installLog, msg.line)
+		// Keep only last 100 lines to prevent memory issues
+		if len(a.installLog) > 100 {
+			a.installLog = a.installLog[len(a.installLog)-100:]
+		}
+		return a, nil
+
+	case installDoneMsg:
+		a.installRunning = false
+		a.installComplete = true
+		a.installError = msg.err
+		if msg.err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Error: %v", msg.err))
+		} else {
+			a.installLog = append(a.installLog, "✅ Installation completed successfully!")
+		}
+		return a, nil
 
 	case tea.KeyMsg:
 		// PRIORITY: Handle text input first when editing
@@ -378,6 +415,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.currentView = ViewMain
 				a.cursor = 0
 				a.repoURL.Blur()
+			case ViewInstalling:
+				// Only allow exit if not running
+				if !a.installRunning {
+					a.currentView = ViewInstaller
+					a.installLog = nil
+					a.installComplete = false
+					a.installError = nil
+				}
 			}
 			return a, nil
 
@@ -626,6 +671,8 @@ func (a *App) View() string {
 		content = a.renderHelpView(contentWidth)
 	case ViewCloneSetup:
 		content = a.renderCloneSetupView(contentWidth)
+	case ViewInstalling:
+		content = a.renderInstallingView(contentWidth)
 	}
 
 	// RGB animated border color
@@ -1210,7 +1257,7 @@ func (a *App) executeInstall() {
 	a.output = fmt.Sprintf("✅ Script ready: %s\n\nRun manually:\n  chmod +x %s && sudo %s", scriptPath, scriptPath, scriptPath)
 }
 
-// executeSSHInstall runs the installer via SSH
+// executeSSHInstall runs the installer via SSH with progress view
 func (a *App) executeSSHInstall() {
 	if a.selectedInstaller == nil {
 		a.output = "❌ No installer selected"
@@ -1239,39 +1286,149 @@ func (a *App) executeSSHInstall() {
 		fmt.Sscanf(portStr, "%d", &port)
 	}
 
-	a.output = fmt.Sprintf("🔌 Connecting to %s@%s:%d...", user, host, port)
+	// Switch to installing view
+	a.currentView = ViewInstalling
+	a.installLog = nil
+	a.installRunning = true
+	a.installComplete = false
+	a.installError = nil
+	a.installStartTime = time.Now()
 
-	// Create SSH executor
-	sshConfig := executor.SSHConfig{
-		Host:     host,
-		Port:     port,
-		User:     user,
-		Password: pass,
+	// Add initial log entries
+	a.installLog = append(a.installLog, fmt.Sprintf("🔌 Connecting to %s@%s:%d...", user, host, port))
+	a.installLog = append(a.installLog, fmt.Sprintf("📦 Installing: %s", a.selectedInstaller.Name()))
+	a.installLog = append(a.installLog, "")
+
+	// Run install in background
+	installerToRun := a.selectedInstaller
+	go func() {
+		// Create SSH executor
+		sshConfig := executor.SSHConfig{
+			Host:     host,
+			Port:     port,
+			User:     user,
+			Password: pass,
+		}
+		sshExec := executor.NewSSHExecutor(sshConfig)
+
+		// Connect
+		err := sshExec.Connect()
+		if err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ SSH connection failed: %v", err))
+			a.installRunning = false
+			a.installComplete = true
+			a.installError = err
+			return
+		}
+		defer sshExec.Close()
+
+		a.installLog = append(a.installLog, fmt.Sprintf("✅ Connected to %s!", host))
+		a.installLog = append(a.installLog, "")
+		a.installLog = append(a.installLog, "▶ Running installation script...")
+		a.installLog = append(a.installLog, "")
+
+		// Generate and execute install script
+		script := installerToRun.GenerateInstallScript(sshExec.GetOS(), sshExec.GetPackageManager())
+
+		// Run the script with streaming output
+		output, err := sshExec.Run(script)
+
+		// Parse output lines
+		lines := strings.Split(output, "\n")
+		for _, line := range lines {
+			if line != "" {
+				a.installLog = append(a.installLog, "  "+line)
+			}
+		}
+
+		if err != nil {
+			a.installLog = append(a.installLog, "")
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Installation failed: %v", err))
+			a.installError = err
+		} else {
+			a.installLog = append(a.installLog, "")
+			a.installLog = append(a.installLog, fmt.Sprintf("✅ Successfully installed %s!", installerToRun.Name()))
+		}
+
+		a.installRunning = false
+		a.installComplete = true
+	}()
+}
+
+// renderInstallingView renders the installation progress view
+func (a *App) renderInstallingView(width int) string {
+	var b strings.Builder
+
+	// Title with spinner animation
+	spinnerFrames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	frameIndex := int(time.Now().UnixNano()/100000000) % len(spinnerFrames)
+
+	var titleText string
+	if a.installRunning {
+		spinner := spinnerFrames[frameIndex]
+		titleText = fmt.Sprintf("%s Installing...", spinner)
+	} else if a.installComplete {
+		if a.installError != nil {
+			titleText = "❌ Installation Failed"
+		} else {
+			titleText = "✅ Installation Complete"
+		}
 	}
-	sshExec := executor.NewSSHExecutor(sshConfig)
 
-	// Connect
-	err := sshExec.Connect()
-	if err != nil {
-		a.output = fmt.Sprintf("❌ SSH connection failed: %v", err)
-		return
-	}
-	defer sshExec.Close()
+	b.WriteString(TitleStyle.Render(titleText))
+	b.WriteString("\n")
 
-	a.output = fmt.Sprintf("✅ Connected to %s! Installing %s...", host, a.selectedInstaller.Name())
+	// Show elapsed time
+	elapsed := time.Since(a.installStartTime).Round(time.Second)
+	b.WriteString(MutedStyle.Render(fmt.Sprintf("⏱ Elapsed: %s", elapsed)))
+	b.WriteString("\n\n")
 
-	// Generate and execute install script
-	script := a.selectedInstaller.GenerateInstallScript(sshExec.GetOS(), sshExec.GetPackageManager())
-
-	// Run the script
-	output, err := sshExec.Run(script)
-	if err != nil {
-		a.output = fmt.Sprintf("❌ Installation failed: %v\n\nOutput:\n%s", err, output)
-		return
+	// Progress log box
+	logHeight := 15 // Show last 15 lines
+	startIdx := 0
+	if len(a.installLog) > logHeight {
+		startIdx = len(a.installLog) - logHeight
 	}
 
-	a.output = fmt.Sprintf("✅ Successfully installed %s on %s!\n\nOutput:\n%s",
-		a.selectedInstaller.Name(), host, output)
+	b.WriteString(SubtitleStyle.Render("📋 Installation Log"))
+	b.WriteString("\n")
+
+	// Log content
+	logContent := strings.Builder{}
+	for i := startIdx; i < len(a.installLog); i++ {
+		line := a.installLog[i]
+		// Color code lines
+		if strings.HasPrefix(line, "✅") {
+			logContent.WriteString(SuccessStyle.Render(line))
+		} else if strings.HasPrefix(line, "❌") {
+			logContent.WriteString(ErrorStyle.Render(line))
+		} else if strings.HasPrefix(line, "🔌") || strings.HasPrefix(line, "📦") || strings.HasPrefix(line, "▶") {
+			logContent.WriteString(InfoStyle.Render(line))
+		} else {
+			logContent.WriteString(MutedStyle.Render(line))
+		}
+		logContent.WriteString("\n")
+	}
+
+	logBox := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(BorderColor).
+		Padding(0, 1).
+		Width(width - 4).
+		Height(logHeight + 2).
+		Render(logContent.String())
+
+	b.WriteString(logBox)
+	b.WriteString("\n\n")
+
+	// Help text
+	if a.installRunning {
+		b.WriteString(MutedStyle.Render("Installation in progress... Please wait."))
+	} else {
+		b.WriteString(HelpStyle.Render("[Esc] Back"))
+	}
+
+	return b.String()
 }
 
 // renderCloneSetupView renders the Clone & Setup view

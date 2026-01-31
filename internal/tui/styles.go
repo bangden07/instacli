@@ -127,6 +127,9 @@ var (
 
 	InfoStyle = lipgloss.NewStyle().
 			Foreground(Secondary)
+
+	MutedStyle = lipgloss.NewStyle().
+			Foreground(Muted)
 )
 
 // Help/footer styles
