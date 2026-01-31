@@ -1085,26 +1085,60 @@ func (a *App) executeSSHInstall() {
 	}
 
 	host := a.sshHost.Value()
-	port := a.sshPort.Value()
+	portStr := a.sshPort.Value()
 	user := a.sshUser.Value()
+	pass := a.sshPass.Value()
 
 	if host == "" {
-		a.output = "❌ SSH host not configured"
+		a.output = "❌ SSH host not configured. Go to Settings."
 		return
 	}
-	if port == "" {
-		port = "22"
+	if portStr == "" {
+		portStr = "22"
 	}
 	if user == "" {
 		user = "root"
 	}
 
-	// Generate script
-	script := a.selectedInstaller.GenerateInstallScript(installers.OSLinux, installers.PMApt)
+	// Parse port
+	port := 22
+	if portStr != "" {
+		fmt.Sscanf(portStr, "%d", &port)
+	}
 
-	// Build SSH command instruction
-	a.output = fmt.Sprintf("✅ Ready to install %s on %s@%s:%s\n\nRun manually:\n  ssh %s@%s -p %s 'bash -s' << 'EOF'\n%s\nEOF",
-		a.selectedInstaller.Name(), user, host, port, user, host, port, script)
+	a.output = fmt.Sprintf("🔌 Connecting to %s@%s:%d...", user, host, port)
+
+	// Create SSH executor
+	sshConfig := executor.SSHConfig{
+		Host:     host,
+		Port:     port,
+		User:     user,
+		Password: pass,
+	}
+	sshExec := executor.NewSSHExecutor(sshConfig)
+
+	// Connect
+	err := sshExec.Connect()
+	if err != nil {
+		a.output = fmt.Sprintf("❌ SSH connection failed: %v", err)
+		return
+	}
+	defer sshExec.Close()
+
+	a.output = fmt.Sprintf("✅ Connected to %s! Installing %s...", host, a.selectedInstaller.Name())
+
+	// Generate and execute install script
+	script := a.selectedInstaller.GenerateInstallScript(sshExec.GetOS(), sshExec.GetPackageManager())
+
+	// Run the script
+	output, err := sshExec.Run(script)
+	if err != nil {
+		a.output = fmt.Sprintf("❌ Installation failed: %v\n\nOutput:\n%s", err, output)
+		return
+	}
+
+	a.output = fmt.Sprintf("✅ Successfully installed %s on %s!\n\nOutput:\n%s",
+		a.selectedInstaller.Name(), host, output)
 }
 
 // renderCloneSetupView renders the Clone & Setup view
