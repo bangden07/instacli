@@ -179,7 +179,7 @@ func NewApp() *App {
 
 // tick returns a command that sends a tickMsg after a duration
 func tick() tea.Cmd {
-	return tea.Tick(time.Millisecond*50, func(t time.Time) tea.Msg {
+	return tea.Tick(time.Millisecond*200, func(t time.Time) tea.Msg {
 		return tickMsg{}
 	})
 }
