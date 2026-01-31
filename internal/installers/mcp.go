@@ -661,9 +661,8 @@ configure_opencode_mcp() {
     fi
 }
 
-if command -v opencode &> /dev/null || [ -d "$HOME_DIR/.config/opencode" ]; then
-    configure_opencode_mcp "$HOME_DIR/.config/opencode/opencode.json"
-fi
+# Always configure OpenCode (user selected this MCP target)
+configure_opencode_mcp "$HOME_DIR/.config/opencode/opencode.json"
 
 # Configure for Gemini CLI
 if [ -d "$HOME_DIR/.gemini" ]; then
@@ -794,9 +793,8 @@ function Configure-OpenCodeMCP {
 }
 
 $OpenCodeConfig = "$HomeDir\.config\opencode\opencode.json"
-if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path "$HomeDir\.config\opencode")) {
-    Configure-OpenCodeMCP $OpenCodeConfig
-}
+# Always configure OpenCode (user selected this MCP target)
+Configure-OpenCodeMCP $OpenCodeConfig
 
 # Configure for Gemini CLI
 $GeminiConfig = "$HomeDir\.gemini\settings.json"
