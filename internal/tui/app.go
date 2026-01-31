@@ -28,6 +28,7 @@ const (
 	ViewRunning
 	ViewSystemStatus
 	ViewHelp
+	ViewCloneSetup
 )
 
 // TargetMode represents local or SSH
@@ -84,6 +85,8 @@ type App struct {
 	quitting          bool
 	output            string
 	hue               float64 // For RGB animation (0-360)
+	repoURL           textinput.Model
+	detectedProject   *executor.ProjectInfo
 }
 
 // tickMsg for animation
@@ -108,6 +111,7 @@ func NewApp() *App {
 		{"DNS & Network", "Pi-hole ad blocker", "🕳️", installers.CategoryDNS},
 		{"CMS & Blog", "WordPress, Ghost", "📝", installers.CategoryCMS},
 		{"Backup", "Restic backup", "💾", installers.CategoryBackup},
+		{"Clone & Setup", "Auto-setup from Git repository", "📥", ""},
 		{"Settings", "SSH Config, Preferences", "⚙️", ""},
 	}
 
@@ -133,6 +137,12 @@ func NewApp() *App {
 	sysCheck := executor.NewSystemCheck()
 	sysCheck.DetectAll()
 
+	// Repository URL input
+	repoURL := textinput.New()
+	repoURL.Placeholder = "https://github.com/user/repo.git"
+	repoURL.CharLimit = 200
+	repoURL.Width = 50
+
 	return &App{
 		currentView:   ViewMain,
 		targetMode:    TargetLocal,
@@ -144,6 +154,7 @@ func NewApp() *App {
 		sshPort:       sshPort,
 		sshUser:       sshUser,
 		sshPass:       sshPass,
+		repoURL:       repoURL,
 	}
 }
 
@@ -231,6 +242,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						a.sysCheck = executor.NewSystemCheck()
 						a.sysCheck.DetectAll()
 						a.currentView = ViewSystemStatus
+					} else if item.title == "Clone & Setup" {
+						a.repoURL.Focus()
+						a.currentView = ViewCloneSetup
 					} else {
 						a.selectedCategory = item.title
 						a.loadInstallers(item.category)
@@ -265,9 +279,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					a.currentView = ViewMain
 					a.cursor = 0
 				}
-			case ViewSystemStatus, ViewHelp:
+			case ViewSystemStatus, ViewHelp, ViewCloneSetup:
 				a.currentView = ViewMain
 				a.cursor = 0
+				a.repoURL.Blur()
 			}
 			return a, nil
 
@@ -357,6 +372,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case 3:
 					a.sshPass, cmd = a.sshPass.Update(msg)
 				}
+				return a, cmd
+			}
+			// Handle text input in Clone & Setup view
+			if a.currentView == ViewCloneSetup {
+				var cmd tea.Cmd
+				a.repoURL, cmd = a.repoURL.Update(msg)
 				return a, cmd
 			}
 		}
@@ -470,6 +491,8 @@ func (a *App) View() string {
 		content = a.renderSystemStatusView(contentWidth)
 	case ViewHelp:
 		content = a.renderHelpView(contentWidth)
+	case ViewCloneSetup:
+		content = a.renderCloneSetupView(contentWidth)
 	}
 
 	// RGB animated border color
@@ -1082,6 +1105,62 @@ func (a *App) executeSSHInstall() {
 	// Build SSH command instruction
 	a.output = fmt.Sprintf("✅ Ready to install %s on %s@%s:%s\n\nRun manually:\n  ssh %s@%s -p %s 'bash -s' << 'EOF'\n%s\nEOF",
 		a.selectedInstaller.Name(), user, host, port, user, host, port, script)
+}
+
+// renderCloneSetupView renders the Clone & Setup view
+func (a *App) renderCloneSetupView(width int) string {
+	var b strings.Builder
+
+	b.WriteString(TitleStyle.Render("📥 Clone & Setup Repository"))
+	b.WriteString("\n\n")
+
+	b.WriteString(SubtitleStyle.Render("Paste a Git repository URL to automatically clone and setup:"))
+	b.WriteString("\n\n")
+
+	// URL input field
+	inputStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(Primary).
+		Padding(0, 1).
+		Width(width - 10)
+
+	b.WriteString(inputStyle.Render(a.repoURL.View()))
+	b.WriteString("\n\n")
+
+	// Supported project types
+	b.WriteString(SubtitleStyle.Render("✨ Auto-detected project types:"))
+	b.WriteString("\n")
+
+	projectTypes := []struct {
+		icon string
+		name string
+		pm   string
+	}{
+		{"📦", "Node.js", "npm, pnpm, yarn, bun"},
+		{"🐍", "Python", "pip, pipenv, venv"},
+		{"🐹", "Go", "go mod"},
+		{"🐘", "PHP/Laravel", "composer"},
+		{"💎", "Ruby", "bundler"},
+		{"🦀", "Rust", "cargo"},
+		{"🐳", "Docker", "docker compose"},
+	}
+
+	for _, pt := range projectTypes {
+		b.WriteString(fmt.Sprintf("  %s %s (%s)\n", pt.icon, pt.name, pt.pm))
+	}
+
+	b.WriteString("\n")
+
+	// Show detected project if available
+	if a.detectedProject != nil {
+		b.WriteString(SuccessStyle.Render("Detected: " + a.detectedProject.Framework))
+		b.WriteString("\n")
+	}
+
+	b.WriteString("\n")
+	b.WriteString(HelpStyle.Render("Press Enter to clone & setup, Esc to go back"))
+
+	return b.String()
 }
 
 func createDelegate() list.DefaultDelegate {
