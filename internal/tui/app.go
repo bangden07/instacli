@@ -207,6 +207,101 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tick()
 
 	case tea.KeyMsg:
+		// PRIORITY: Handle text input first when editing
+		// This ensures backspace and other keys work correctly in text fields
+		if a.currentView == ViewSettings && a.editingSSH {
+			// Only handle navigation keys specially, forward all others to textinput
+			switch msg.String() {
+			case "esc":
+				// Exit editing mode
+				a.editingSSH = false
+				a.sshHost.Blur()
+				a.sshPort.Blur()
+				a.sshUser.Blur()
+				a.sshPass.Blur()
+				return a, nil
+			case "tab", "down":
+				a.focusedInput = (a.focusedInput + 1) % 4
+				a.sshHost.Blur()
+				a.sshPort.Blur()
+				a.sshUser.Blur()
+				a.sshPass.Blur()
+				switch a.focusedInput {
+				case 0:
+					a.sshHost.Focus()
+				case 1:
+					a.sshPort.Focus()
+				case 2:
+					a.sshUser.Focus()
+				case 3:
+					a.sshPass.Focus()
+				}
+				return a, nil
+			case "shift+tab", "up":
+				a.focusedInput = (a.focusedInput - 1 + 4) % 4
+				a.sshHost.Blur()
+				a.sshPort.Blur()
+				a.sshUser.Blur()
+				a.sshPass.Blur()
+				switch a.focusedInput {
+				case 0:
+					a.sshHost.Focus()
+				case 1:
+					a.sshPort.Focus()
+				case 2:
+					a.sshUser.Focus()
+				case 3:
+					a.sshPass.Focus()
+				}
+				return a, nil
+			case "enter":
+				// Save and exit editing
+				a.editingSSH = false
+				a.sshHost.Blur()
+				a.sshPort.Blur()
+				a.sshUser.Blur()
+				a.sshPass.Blur()
+				a.output = "✅ SSH configuration saved"
+				return a, nil
+			default:
+				// Forward ALL other keys (including backspace) to textinput
+				var cmd tea.Cmd
+				switch a.focusedInput {
+				case 0:
+					a.sshHost, cmd = a.sshHost.Update(msg)
+				case 1:
+					a.sshPort, cmd = a.sshPort.Update(msg)
+				case 2:
+					a.sshUser, cmd = a.sshUser.Update(msg)
+				case 3:
+					a.sshPass, cmd = a.sshPass.Update(msg)
+				}
+				return a, cmd
+			}
+		}
+
+		// Handle Clone & Setup text input
+		if a.currentView == ViewCloneSetup {
+			switch msg.String() {
+			case "esc":
+				a.currentView = ViewMain
+				a.cursor = 0
+				a.repoURL.Blur()
+				return a, nil
+			case "enter":
+				// Process the URL - just show message for now
+				if a.repoURL.Value() != "" {
+					a.output = "📥 Processing: " + a.repoURL.Value()
+				}
+				return a, nil
+			default:
+				// Forward to textinput (includes backspace)
+				var cmd tea.Cmd
+				a.repoURL, cmd = a.repoURL.Update(msg)
+				return a, cmd
+			}
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
 			if a.currentView == ViewMain {
