@@ -632,12 +632,13 @@ if [ -n "$VSCODE_DIR" ]; then
     configure_mcp "$VSCODE_DIR/mcp.json" "VS Code"
 fi
 
-# Configure for OpenCode CLI (uses 'mcp' key, not 'mcpServers')
+# Configure for OpenCode CLI (uses 'mcp' key with type, command array, enabled)
 OPENCODE_MCP_CONFIG='{
   "mcp": {
     "%s": {
-      "command": "npx",
-      "args": ["-y", "%s"]
+      "type": "local",
+      "command": ["npx", "-y", "%s"],
+      "enabled": true
     }
   }
 }'
@@ -691,7 +692,7 @@ echo '    }'
 echo '  }'
 echo '}'
 echo ""
-`, name, pkg, pkg, name, name, pkg, name, name, pkg))
+`, name, pkg, pkg, name, name, pkg, name, pkg, name, name, pkg))
 
 	case OSWindows:
 		script.WriteString(fmt.Sprintf(`# PowerShell
@@ -757,13 +758,14 @@ if (Test-Path (Split-Path $VsCodeConfig -Parent)) {
     Configure-MCP $VsCodeConfig "VS Code"
 }
 
-# Configure for OpenCode CLI (uses 'mcp' key, not 'mcpServers')
+# Configure for OpenCode CLI (uses 'mcp' key with type, command array, enabled)
 $OpenCodeMcpConfig = @'
 {
   "mcp": {
     "%s": {
-      "command": "npx",
-      "args": ["-y", "%s"]
+      "type": "local",
+      "command": ["npx", "-y", "%s"],
+      "enabled": true
     }
   }
 }
@@ -814,7 +816,7 @@ Write-Host "📁 VS Code/Cline:  %%APPDATA%%\Code\User\mcp.json"
 Write-Host "📁 OpenCode:       %%USERPROFILE%%\.config\opencode\opencode.json"
 Write-Host "📁 Gemini CLI:     %%USERPROFILE%%\.gemini\settings.json"
 Write-Host ""
-`, name, pkg, name, name, pkg, name))
+`, name, pkg, name, name, pkg, name, pkg, name))
 	}
 
 	return script.String()
