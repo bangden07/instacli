@@ -239,9 +239,7 @@ main() {
     
     # Verify installation
     if command -v instacli &> /dev/null; then
-        INSTALLED_VERSION=$(instacli --version 2>/dev/null || echo "unknown")
         echo -e "${GREEN}🎉 InstaCli is ready!${NC}"
-        echo -e "   Version: ${INSTALLED_VERSION}"
         echo ""
         echo -e "   Run ${CYAN}instacli${NC} to start the TUI installer."
     else
