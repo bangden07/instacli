@@ -131,6 +131,8 @@ func NewApp() *App {
 		{"DNS & Network", "Pi-hole ad blocker", "🕳️", installers.CategoryDNS},
 		{"CMS & Blog", "WordPress, Ghost", "📝", installers.CategoryCMS},
 		{"Backup", "Restic backup", "💾", installers.CategoryBackup},
+		{"AI CLI Tools", "Claude, Gemini, Codex, Aider, OpenCode", "🤖", installers.CategoryAICLI},
+		{"MCP Servers", "Context7, Playwright, GitHub, Memory", "📦", installers.CategoryMCP},
 		{"Clone & Setup", "Auto-setup from Git repository", "📥", ""},
 		{"Settings", "SSH Config, Preferences", "⚙️", ""},
 	}
