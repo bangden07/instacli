@@ -135,12 +135,12 @@ func DetectAllMCPTargets() []MCPTarget {
 	}
 
 	// OpenCode CLI
-	opencodePath := filepath.Join(home, ".opencode")
+	opencodePath := filepath.Join(home, ".config", "opencode")
 	if _, err := exec.LookPath("opencode"); err == nil {
 		targets = append(targets, MCPTarget{
 			Name:       "OpenCode",
 			Icon:       "💻",
-			ConfigPath: filepath.Join(opencodePath, "config.json"),
+			ConfigPath: filepath.Join(opencodePath, "opencode.json"),
 			Installed:  true,
 			Type:       "cli",
 		})
@@ -148,7 +148,7 @@ func DetectAllMCPTargets() []MCPTarget {
 		targets = append(targets, MCPTarget{
 			Name:       "OpenCode",
 			Icon:       "💻",
-			ConfigPath: filepath.Join(opencodePath, "config.json"),
+			ConfigPath: filepath.Join(opencodePath, "opencode.json"),
 			Installed:  true,
 			Type:       "cli",
 		})
@@ -632,9 +632,36 @@ if [ -n "$VSCODE_DIR" ]; then
     configure_mcp "$VSCODE_DIR/mcp.json" "VS Code"
 fi
 
-# Configure for OpenCode CLI
-if command -v opencode &> /dev/null || [ -d "$HOME_DIR/.opencode" ]; then
-    configure_mcp "$HOME_DIR/.opencode/config.json" "OpenCode"
+# Configure for OpenCode CLI (uses 'mcp' key, not 'mcpServers')
+OPENCODE_MCP_CONFIG='{
+  "mcp": {
+    "%s": {
+      "command": "npx",
+      "args": ["-y", "%s"]
+    }
+  }
+}'
+
+configure_opencode_mcp() {
+    local config_file="$1"
+    
+    if [ -f "$config_file" ]; then
+        echo "📝 Updating OpenCode MCP config..."
+        if grep -q '"%s"' "$config_file" 2>/dev/null; then
+            echo "   Already configured in OpenCode"
+        else
+            cp "$config_file" "$config_file.bak"
+            echo "   Added to OpenCode (check $config_file)"
+        fi
+    else
+        mkdir -p "$(dirname "$config_file")"
+        echo "$OPENCODE_MCP_CONFIG" > "$config_file"
+        echo "✅ Created OpenCode config: $config_file"
+    fi
+}
+
+if command -v opencode &> /dev/null || [ -d "$HOME_DIR/.config/opencode" ]; then
+    configure_opencode_mcp "$HOME_DIR/.config/opencode/opencode.json"
 fi
 
 # Configure for Gemini CLI
@@ -651,7 +678,7 @@ echo "📁 Cursor:        ~/.cursor/mcp.json"
 echo "📁 Claude Desktop: ~/.config/claude/claude_desktop_config.json"
 echo "📁 Windsurf:      ~/.windsurf/mcp.json"  
 echo "📁 VS Code/Cline: ~/.vscode/mcp.json"
-echo "📁 OpenCode:      ~/.opencode/config.json"
+echo "📁 OpenCode:      ~/.config/opencode/opencode.json"
 echo "📁 Gemini CLI:    ~/.gemini/settings.json"
 echo ""
 echo "Manual Configuration:"
@@ -730,10 +757,43 @@ if (Test-Path (Split-Path $VsCodeConfig -Parent)) {
     Configure-MCP $VsCodeConfig "VS Code"
 }
 
-# Configure for OpenCode CLI
-$OpenCodeConfig = "$HomeDir\.opencode\config.json"
-if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path "$HomeDir\.opencode")) {
-    Configure-MCP $OpenCodeConfig "OpenCode"
+# Configure for OpenCode CLI (uses 'mcp' key, not 'mcpServers')
+$OpenCodeMcpConfig = @'
+{
+  "mcp": {
+    "%s": {
+      "command": "npx",
+      "args": ["-y", "%s"]
+    }
+  }
+}
+'@
+
+function Configure-OpenCodeMCP {
+    param([string]$ConfigFile)
+    
+    if (Test-Path $ConfigFile) {
+        Write-Host "📝 Updating OpenCode MCP config..."
+        $content = Get-Content $ConfigFile -Raw -ErrorAction SilentlyContinue
+        if ($content -match '"%s"') {
+            Write-Host "   Already configured in OpenCode"
+        } else {
+            Copy-Item $ConfigFile "$ConfigFile.bak"
+            Write-Host "   Added to OpenCode (check $ConfigFile)"
+        }
+    } else {
+        $parentDir = Split-Path $ConfigFile -Parent
+        if (-not (Test-Path $parentDir)) {
+            New-Item -ItemType Directory -Path $parentDir -Force | Out-Null
+        }
+        $OpenCodeMcpConfig | Out-File -FilePath $ConfigFile -Encoding UTF8 -Force
+        Write-Host "✅ Created OpenCode config: $ConfigFile" -ForegroundColor Green
+    }
+}
+
+$OpenCodeConfig = "$HomeDir\.config\opencode\opencode.json"
+if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path "$HomeDir\.config\opencode")) {
+    Configure-OpenCodeMCP $OpenCodeConfig
 }
 
 # Configure for Gemini CLI
@@ -751,7 +811,7 @@ Write-Host "📁 Cursor:         %%USERPROFILE%%\.cursor\mcp.json"
 Write-Host "📁 Claude Desktop: %%APPDATA%%\Claude\claude_desktop_config.json"
 Write-Host "📁 Windsurf:       %%USERPROFILE%%\.windsurf\mcp.json"
 Write-Host "📁 VS Code/Cline:  %%APPDATA%%\Code\User\mcp.json"
-Write-Host "📁 OpenCode:       %%USERPROFILE%%\.opencode\config.json"
+Write-Host "📁 OpenCode:       %%USERPROFILE%%\.config\opencode\opencode.json"
 Write-Host "📁 Gemini CLI:     %%USERPROFILE%%\.gemini\settings.json"
 Write-Host ""
 `, name, pkg, name, name, pkg, name))
