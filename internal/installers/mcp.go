@@ -135,11 +135,20 @@ func DetectAllMCPTargets() []MCPTarget {
 	}
 
 	// OpenCode CLI
+	opencodePath := filepath.Join(home, ".config", "opencode")
 	if _, err := exec.LookPath("opencode"); err == nil {
 		targets = append(targets, MCPTarget{
 			Name:       "OpenCode",
 			Icon:       "💻",
-			ConfigPath: filepath.Join(home, ".opencode", "mcp.json"),
+			ConfigPath: filepath.Join(opencodePath, "opencode.json"),
+			Installed:  true,
+			Type:       "cli",
+		})
+	} else if _, err := os.Stat(opencodePath); err == nil {
+		targets = append(targets, MCPTarget{
+			Name:       "OpenCode",
+			Icon:       "💻",
+			ConfigPath: filepath.Join(opencodePath, "opencode.json"),
 			Installed:  true,
 			Type:       "cli",
 		})
@@ -623,6 +632,16 @@ if [ -n "$VSCODE_DIR" ]; then
     configure_mcp "$VSCODE_DIR/mcp.json" "VS Code"
 fi
 
+# Configure for OpenCode CLI
+if command -v opencode &> /dev/null || [ -d "$HOME_DIR/.config/opencode" ]; then
+    configure_mcp "$HOME_DIR/.config/opencode/opencode.json" "OpenCode"
+fi
+
+# Configure for Gemini CLI
+if [ -d "$HOME_DIR/.gemini" ]; then
+    configure_mcp "$HOME_DIR/.gemini/settings.json" "Gemini CLI"
+fi
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "MCP Configuration Locations:"
@@ -632,6 +651,7 @@ echo "📁 Cursor:        ~/.cursor/mcp.json"
 echo "📁 Claude Desktop: ~/.config/claude/claude_desktop_config.json"
 echo "📁 Windsurf:      ~/.windsurf/mcp.json"  
 echo "📁 VS Code/Cline: ~/.vscode/mcp.json"
+echo "📁 OpenCode:      ~/.config/opencode/opencode.json"
 echo "📁 Gemini CLI:    ~/.gemini/settings.json"
 echo ""
 echo "Manual Configuration:"
@@ -710,6 +730,18 @@ if (Test-Path (Split-Path $VsCodeConfig -Parent)) {
     Configure-MCP $VsCodeConfig "VS Code"
 }
 
+# Configure for OpenCode CLI
+$OpenCodeConfig = "$HomeDir\.config\opencode\opencode.json"
+if ((Get-Command opencode -ErrorAction SilentlyContinue) -or (Test-Path "$HomeDir\.config\opencode")) {
+    Configure-MCP $OpenCodeConfig "OpenCode"
+}
+
+# Configure for Gemini CLI
+$GeminiConfig = "$HomeDir\.gemini\settings.json"
+if (Test-Path "$HomeDir\.gemini") {
+    Configure-MCP $GeminiConfig "Gemini CLI"
+}
+
 Write-Host ""
 Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 Write-Host "MCP Configuration Locations:" -ForegroundColor Yellow
@@ -719,6 +751,7 @@ Write-Host "📁 Cursor:         %%USERPROFILE%%\.cursor\mcp.json"
 Write-Host "📁 Claude Desktop: %%APPDATA%%\Claude\claude_desktop_config.json"
 Write-Host "📁 Windsurf:       %%USERPROFILE%%\.windsurf\mcp.json"
 Write-Host "📁 VS Code/Cline:  %%APPDATA%%\Code\User\mcp.json"
+Write-Host "📁 OpenCode:       %%USERPROFILE%%\.config\opencode\opencode.json"
 Write-Host "📁 Gemini CLI:     %%USERPROFILE%%\.gemini\settings.json"
 Write-Host ""
 `, name, pkg, name, name, pkg, name))
