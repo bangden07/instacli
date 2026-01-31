@@ -2,6 +2,13 @@
 
 InstaCli is a universal server installation tool with a beautiful Terminal User Interface (TUI). This wiki provides comprehensive documentation for all features.
 
+## ✨ What's New in v1.3.1
+
+- 🤖 **7 AI CLI Tools** - Claude, Gemini, Codex, Aider, Kilo Code, Continue, OpenCode
+- 📦 **8 MCP Servers** - Context7, Playwright, GitHub, Filesystem, PostgreSQL, Brave Search, Memory, Sequential Thinking
+- 🎨 **Premium Cyberpunk UI** - New neon theme with double borders
+- 🔧 **42+ Total Installers**
+
 ## 📚 Documentation
 
 ### Getting Started
@@ -10,7 +17,7 @@ InstaCli is a universal server installation tool with a beautiful Terminal User 
 - [[Keyboard Shortcuts]] - Master the TUI navigation
 
 ### Features
-- [[Installers]] - Complete list of 28+ installers
+- [[Installers]] - Complete list of 42+ installers
 - [[Clone and Setup]] - Auto-setup Git repositories
 - [[SSH Remote Installation]] - Install on remote servers
 - [[System Status]] - View system information
@@ -25,6 +32,8 @@ InstaCli is a universal server installation tool with a beautiful Terminal User 
 - [[CI CD]] - Jenkins, GitLab Runner, GitHub Actions
 - [[Security]] - UFW, Certbot, Fail2ban
 - [[CMS]] - WordPress, Ghost
+- [[AI CLI]] - Claude, Gemini, Codex, Aider, OpenCode
+- [[MCP Servers]] - Context7, Playwright, GitHub, and more
 
 ### Development
 - [[Project Structure]] - Code organization
@@ -33,7 +42,7 @@ InstaCli is a universal server installation tool with a beautiful Terminal User 
 
 ## 🏷️ Version
 
-Current Version: **v1.2.0**
+Current Version: **v1.3.1**
 
 ## 🔗 Links
 

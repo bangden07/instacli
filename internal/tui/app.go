@@ -1005,10 +1005,10 @@ func (a *App) renderSettingsView(width int) string {
 		Width(width - 6)
 
 	about := WarningStyle.Render("ℹ️  About InstaCli") + "\n\n"
-	about += "  Version: 1.0.0\n"
+	about += fmt.Sprintf("  Version: %s\n", version.Version)
 	about += "  Author:  InstaCli Team\n"
 	about += "  License: MIT\n"
-	about += "  Website: github.com/instacli/instacli"
+	about += "  Website: github.com/bangden07/instacli"
 
 	b.WriteString(aboutBox.Render(about))
 
