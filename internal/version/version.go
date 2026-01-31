@@ -2,7 +2,7 @@ package version
 
 // Version information
 const (
-	Version   = "1.2.9"
+	Version   = "1.3.0"
 	BuildDate = "2026-01-31"
 	GitCommit = ""
 )
