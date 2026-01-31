@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/instacli/instacli/internal/executor"
 	"github.com/instacli/instacli/internal/installers"
+	"github.com/instacli/instacli/internal/version"
 )
 
 // View represents different screens
@@ -607,21 +608,26 @@ func (a *App) View() string {
 	var b strings.Builder
 
 	// ═══════════════════════════════════════════════════════════
-	// HEADER BOX - Adaptive based on terminal height
+	// HEADER BOX - Premium cyberpunk style
 	// ═══════════════════════════════════════════════════════════
 	var headerContent string
+	versionBadge := lipgloss.NewStyle().
+		Foreground(Secondary).
+		Bold(true).
+		Render(fmt.Sprintf("v%s", version.Version))
+
 	if a.height > 35 {
 		// Full header with logo for large terminals
-		headerContent = LogoStyle.Render(Logo) + "\n" +
-			SubtitleStyle.Render("     🚀 Universal Installer Tool v1.0")
+		headerContent = LogoStyle.Render(Logo) + "\n\n" +
+			SubtitleStyle.Render("⚡ Universal Installer Tool") + "  " + versionBadge
 	} else {
 		// Compact header for small terminals
-		headerContent = TitleStyle.Render("⚡ InstaCli") + "  " +
-			SubtitleStyle.Render("Universal Installer Tool v1.0")
+		headerContent = TitleStyle.Render("█ INSTACLI") + "  " +
+			SubtitleStyle.Render("Universal Installer") + " " + versionBadge
 	}
 
 	headerBox := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
+		Border(lipgloss.DoubleBorder()).
 		BorderForeground(Primary).
 		Padding(0, 2).
 		Width(contentWidth).
