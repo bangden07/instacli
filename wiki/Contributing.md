@@ -14,7 +14,7 @@ Thank you for your interest in contributing! 🎉
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/instacli.git
+git clone https://github.com/YOUR-USERNAME/instacli.git
 cd instacli
 
 # Install dependencies

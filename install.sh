@@ -1,10 +1,10 @@
 #!/bin/bash
 # InstaCli Installer Script
-# Usage: curl -sSL https://raw.githubusercontent.com/YOUR_USERNAME/instacli/main/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/bangden07/instacli/main/install.sh | bash
 
 set -e
 
-REPO="YOUR_USERNAME/instacli"
+REPO="bangden07/instacli"
 VERSION="latest"
 INSTALL_DIR="/usr/local/bin"
 
