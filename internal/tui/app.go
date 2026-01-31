@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"bufio"
 	"fmt"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -1235,26 +1237,128 @@ func (a *App) generateScript() error {
 	return nil
 }
 
-// executeInstall runs the installer script locally
+// executeInstall runs the installer script locally with progress view
 func (a *App) executeInstall() {
 	if a.selectedInstaller == nil {
 		a.output = "❌ No installer selected"
 		return
 	}
 
-	// Generate script first
-	if err := a.generateScript(); err != nil {
-		a.output = fmt.Sprintf("❌ Failed to generate script: %v", err)
-		return
-	}
+	// Switch to installing view
+	a.currentView = ViewInstalling
+	a.installLog = nil
+	a.installRunning = true
+	a.installComplete = false
+	a.installError = nil
+	a.installStartTime = time.Now()
 
-	// Get script path
-	name := strings.ToLower(strings.ReplaceAll(a.selectedInstaller.Name(), " ", "_"))
-	scriptPath := filepath.Join(".", "scripts", "generated", name+".sh")
+	// Add initial log entries
+	a.installLog = append(a.installLog, "🖥 Running local installation...")
+	a.installLog = append(a.installLog, fmt.Sprintf("📦 Installing: %s", a.selectedInstaller.Name()))
+	a.installLog = append(a.installLog, "")
 
-	// For now, just update the output with instructions
-	// Real execution would require exec.Command with proper terminal handling
-	a.output = fmt.Sprintf("✅ Script ready: %s\n\nRun manually:\n  chmod +x %s && sudo %s", scriptPath, scriptPath, scriptPath)
+	// Generate script
+	script := a.selectedInstaller.GenerateInstallScript(installers.OSLinux, installers.PMApt)
+
+	// Run in goroutine
+	go func() {
+		// Create temp script file
+		tmpFile, err := os.CreateTemp("", "instacli-*.sh")
+		if err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to create temp file: %v", err))
+			a.installRunning = false
+			a.installComplete = true
+			a.installError = err
+			return
+		}
+		scriptPath := tmpFile.Name()
+		defer os.Remove(scriptPath)
+
+		// Write script
+		if _, err := tmpFile.WriteString(script); err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to write script: %v", err))
+			a.installRunning = false
+			a.installComplete = true
+			a.installError = err
+			return
+		}
+		tmpFile.Close()
+
+		// Make executable
+		os.Chmod(scriptPath, 0755)
+
+		a.installLog = append(a.installLog, "▶ Running installation script...")
+		a.installLog = append(a.installLog, "")
+
+		// Run script with bash
+		cmd := exec.Command("bash", scriptPath)
+		cmd.Env = os.Environ()
+
+		// Capture output
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to capture output: %v", err))
+			a.installRunning = false
+			a.installComplete = true
+			a.installError = err
+			return
+		}
+
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to capture stderr: %v", err))
+			a.installRunning = false
+			a.installComplete = true
+			a.installError = err
+			return
+		}
+
+		// Start command
+		if err := cmd.Start(); err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to start script: %v", err))
+			a.installRunning = false
+			a.installComplete = true
+			a.installError = err
+			return
+		}
+
+		// Read stdout in goroutine
+		go func() {
+			scanner := bufio.NewScanner(stdout)
+			for scanner.Scan() {
+				line := scanner.Text()
+				a.installLog = append(a.installLog, "  "+line)
+				// Keep only last 100 lines
+				if len(a.installLog) > 100 {
+					a.installLog = a.installLog[len(a.installLog)-100:]
+				}
+			}
+		}()
+
+		// Read stderr
+		go func() {
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := scanner.Text()
+				a.installLog = append(a.installLog, "  "+line)
+			}
+		}()
+
+		// Wait for completion
+		err = cmd.Wait()
+
+		if err != nil {
+			a.installLog = append(a.installLog, "")
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Installation failed: %v", err))
+			a.installError = err
+		} else {
+			a.installLog = append(a.installLog, "")
+			a.installLog = append(a.installLog, fmt.Sprintf("✅ Successfully installed %s!", a.selectedInstaller.Name()))
+		}
+
+		a.installRunning = false
+		a.installComplete = true
+	}()
 }
 
 // executeSSHInstall runs the installer via SSH with progress view
