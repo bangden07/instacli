@@ -2,6 +2,8 @@ package executor
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,7 +17,7 @@ type SSHConfig struct {
 	Port       int
 	User       string
 	Password   string
-	PrivateKey string // Path to private key
+	PrivateKey string // Path to private key or the key content itself
 }
 
 // SSHExecutor executes commands over SSH
@@ -41,13 +43,30 @@ func NewSSHExecutor(config SSHConfig) *SSHExecutor {
 func (e *SSHExecutor) Connect() error {
 	var authMethods []ssh.AuthMethod
 
-	// Password authentication
-	if e.config.Password != "" {
-		authMethods = append(authMethods, ssh.Password(e.config.Password))
+	// Try SSH key authentication first (more common for servers)
+	keyAuth := e.tryKeyAuth()
+	if keyAuth != nil {
+		authMethods = append(authMethods, keyAuth)
 	}
 
-	// Key-based authentication would be added here
-	// if e.config.PrivateKey != "" { ... }
+	// Password authentication as fallback
+	if e.config.Password != "" {
+		authMethods = append(authMethods, ssh.Password(e.config.Password))
+		// Also try keyboard-interactive for some servers
+		authMethods = append(authMethods, ssh.KeyboardInteractive(
+			func(user, instruction string, questions []string, echos []bool) ([]string, error) {
+				answers := make([]string, len(questions))
+				for i := range questions {
+					answers[i] = e.config.Password
+				}
+				return answers, nil
+			},
+		))
+	}
+
+	if len(authMethods) == 0 {
+		return fmt.Errorf("no authentication method provided (password or SSH key required)")
+	}
 
 	sshConfig := &ssh.ClientConfig{
 		User:            e.config.User,
@@ -64,6 +83,60 @@ func (e *SSHExecutor) Connect() error {
 
 	e.client = client
 	e.detectPackageManager()
+	return nil
+}
+
+// tryKeyAuth attempts to load SSH private key for authentication
+func (e *SSHExecutor) tryKeyAuth() ssh.AuthMethod {
+	// Check if PrivateKey is provided in config
+	if e.config.PrivateKey != "" {
+		// Check if it's a file path or key content
+		if strings.HasPrefix(e.config.PrivateKey, "-----BEGIN") {
+			// It's the key content itself
+			signer, err := ssh.ParsePrivateKey([]byte(e.config.PrivateKey))
+			if err == nil {
+				return ssh.PublicKeys(signer)
+			}
+		} else {
+			// It's a file path
+			key, err := os.ReadFile(e.config.PrivateKey)
+			if err == nil {
+				signer, err := ssh.ParsePrivateKey(key)
+				if err == nil {
+					return ssh.PublicKeys(signer)
+				}
+			}
+		}
+	}
+
+	// Try default SSH key locations
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+
+	// Common SSH key locations
+	keyPaths := []string{
+		filepath.Join(homeDir, ".ssh", "id_rsa"),
+		filepath.Join(homeDir, ".ssh", "id_ed25519"),
+		filepath.Join(homeDir, ".ssh", "id_ecdsa"),
+		filepath.Join(homeDir, ".ssh", "id_dsa"),
+	}
+
+	for _, keyPath := range keyPaths {
+		key, err := os.ReadFile(keyPath)
+		if err != nil {
+			continue
+		}
+
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			continue
+		}
+
+		return ssh.PublicKeys(signer)
+	}
+
 	return nil
 }
 
