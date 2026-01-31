@@ -61,6 +61,24 @@ func DefaultRegistry() *Registry {
 	// Backup
 	r.Register(NewResticInstaller())
 
+	// AI CLI Tools
+	r.Register(NewClaudeCLIInstaller())
+	r.Register(NewGeminiCLIInstaller())
+	r.Register(NewCodexCLIInstaller())
+	r.Register(NewAiderInstaller())
+	r.Register(NewKiloCodeInstaller())
+	r.Register(NewContinueInstaller())
+
+	// MCP Servers
+	r.Register(NewContext7MCPInstaller())
+	r.Register(NewPlaywrightMCPInstaller())
+	r.Register(NewGitHubMCPInstaller())
+	r.Register(NewFilesystemMCPInstaller())
+	r.Register(NewPostgresMCPInstaller())
+	r.Register(NewBraveSearchMCPInstaller())
+	r.Register(NewMemoryMCPInstaller())
+	r.Register(NewSequentialThinkingMCPInstaller())
+
 	return r
 }
 

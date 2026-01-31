@@ -40,6 +40,8 @@ const (
 	CategoryCMS            Category = "CMS & Blog"
 	CategoryBackup         Category = "Backup"
 	CategoryVPN            Category = "VPN"
+	CategoryAICLI          Category = "AI CLI Tools"
+	CategoryMCP            Category = "MCP Servers"
 )
 
 // Installer is the interface all installers must implement
