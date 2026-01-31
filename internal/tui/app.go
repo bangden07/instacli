@@ -7,10 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -33,6 +33,7 @@ const (
 	ViewHelp
 	ViewCloneSetup
 	ViewInstalling
+	ViewMCPTargetSelect // For selecting MCP installation targets
 )
 
 // TargetMode represents local or SSH
@@ -98,6 +99,9 @@ type App struct {
 	installComplete  bool
 	installError     error
 	installStartTime time.Time
+	// MCP target selection
+	mcpTargets     []installers.MCPTarget
+	mcpSelectedIdx []bool // Multi-select checkboxes
 }
 
 // installOutputMsg for receiving install output
@@ -359,14 +363,39 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 
 		case "up", "k":
-			if a.cursor > 0 {
+			if a.currentView == ViewMain {
+				// Grid navigation: move up by row (numCols items)
+				numCols := a.getGridCols()
+				if a.cursor >= numCols {
+					a.cursor -= numCols
+				}
+			} else if a.cursor > 0 {
 				a.cursor--
 			}
 			return a, nil
 
 		case "down", "j":
 			maxItems := a.getMaxItems()
-			if a.cursor < maxItems-1 {
+			if a.currentView == ViewMain {
+				// Grid navigation: move down by row (numCols items)
+				numCols := a.getGridCols()
+				if a.cursor+numCols < maxItems {
+					a.cursor += numCols
+				}
+			} else if a.cursor < maxItems-1 {
+				a.cursor++
+			}
+			return a, nil
+
+		case "left", "h":
+			if a.currentView == ViewMain && a.cursor > 0 {
+				a.cursor--
+			}
+			return a, nil
+
+		case "right", "l":
+			maxItems := a.getMaxItems()
+			if a.currentView == ViewMain && a.cursor < maxItems-1 {
 				a.cursor++
 			}
 			return a, nil
@@ -462,14 +491,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case ViewCategory:
 				a.currentView = ViewMain
 				a.cursor = 0
+				a.scrollOffset = 0
 			case ViewInstaller:
 				a.currentView = ViewCategory
+				a.cursor = 0
+				a.scrollOffset = 0
 			case ViewSettings:
 				a.currentView = ViewMain
 				a.cursor = 0
 			case ViewSystemStatus, ViewHelp, ViewCloneSetup:
 				a.currentView = ViewMain
 				a.cursor = 0
+			case ViewMCPTargetSelect:
+				a.currentView = ViewInstaller
+				a.cursor = 0
+				a.scrollOffset = 0
 			}
 			return a, nil
 
@@ -529,6 +565,26 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "i":
 			if a.currentView == ViewInstaller && a.selectedInstaller != nil {
+				// Check if this is an MCP installer
+				if a.selectedInstaller.Category() == installers.CategoryMCP {
+					// Detect available targets and show selection
+					a.mcpTargets = installers.DetectAllMCPTargets()
+					if len(a.mcpTargets) == 0 {
+						a.output = "❌ No IDE or AI CLI detected. Install an IDE like Cursor, VS Code, or an AI CLI tool first."
+						return a, nil
+					}
+					// Initialize selection (all selected by default)
+					a.mcpSelectedIdx = make([]bool, len(a.mcpTargets))
+					for i := range a.mcpSelectedIdx {
+						a.mcpSelectedIdx[i] = true
+					}
+					a.cursor = 0
+					a.scrollOffset = 0
+					a.currentView = ViewMCPTargetSelect
+					return a, nil
+				}
+
+				// Normal installation flow
 				if a.targetMode == TargetLocal {
 					a.output = "🚀 Installing locally... (check terminal for output)"
 					go a.executeInstall()
@@ -541,6 +597,45 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						a.output = fmt.Sprintf("🔌 Connecting to %s...", host)
 						go a.executeSSHInstall()
 					}
+				}
+			} else if a.currentView == ViewMCPTargetSelect {
+				// Install MCP to selected targets
+				selectedTargets := []installers.MCPTarget{}
+				for i, selected := range a.mcpSelectedIdx {
+					if selected {
+						selectedTargets = append(selectedTargets, a.mcpTargets[i])
+					}
+				}
+				if len(selectedTargets) == 0 {
+					a.output = "❌ Please select at least one target. Use SPACE to toggle."
+					return a, nil
+				}
+				// Execute MCP installation with selected targets
+				a.output = fmt.Sprintf("🚀 Installing MCP to %d target(s)...", len(selectedTargets))
+				go a.executeMCPInstall(selectedTargets)
+				a.currentView = ViewInstalling
+			}
+			return a, nil
+
+		case " ":
+			// Space toggles selection in MCP target select view
+			if a.currentView == ViewMCPTargetSelect && a.cursor < len(a.mcpSelectedIdx) {
+				a.mcpSelectedIdx[a.cursor] = !a.mcpSelectedIdx[a.cursor]
+			}
+			return a, nil
+
+		case "a":
+			// Select/deselect all in MCP target select view
+			if a.currentView == ViewMCPTargetSelect && len(a.mcpSelectedIdx) > 0 {
+				allSelected := true
+				for _, sel := range a.mcpSelectedIdx {
+					if !sel {
+						allSelected = false
+						break
+					}
+				}
+				for i := range a.mcpSelectedIdx {
+					a.mcpSelectedIdx[i] = !allSelected
 				}
 			}
 			return a, nil
@@ -583,9 +678,31 @@ func (a *App) getMaxItems() int {
 		return len(a.categoryItems)
 	case ViewCategory:
 		return len(a.installerItems)
+	case ViewMCPTargetSelect:
+		return len(a.mcpTargets)
 	default:
 		return 0
 	}
+}
+
+func (a *App) getGridCols() int {
+	// Calculate columns based on content width
+	contentWidth := a.width - 10
+	if contentWidth < 60 {
+		contentWidth = 60
+	}
+	if contentWidth > 100 {
+		contentWidth = 100
+	}
+	itemWidth := 25
+	numCols := contentWidth / itemWidth
+	if numCols < 2 {
+		numCols = 2
+	}
+	if numCols > 4 {
+		numCols = 4
+	}
+	return numCols
 }
 
 func (a *App) loadInstallers(category installers.Category) {
@@ -602,8 +719,8 @@ func (a *App) View() string {
 		return "\n  👋 Thanks for using InstaCli!\n\n"
 	}
 
-	// Calculate widths
-	contentWidth := a.width - 6
+	// Calculate content width - responsive based on terminal size
+	contentWidth := a.width - 10
 	if contentWidth < 60 {
 		contentWidth = 60
 	}
@@ -661,6 +778,8 @@ func (a *App) View() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(BorderColor).
 		Padding(0, 1).
+		Width(contentWidth).
+		Align(lipgloss.Center).
 		Render(targetContent)
 
 	b.WriteString(targetBox)
@@ -687,6 +806,8 @@ func (a *App) View() string {
 		content = a.renderCloneSetupView(contentWidth)
 	case ViewInstalling:
 		content = a.renderInstallingView(contentWidth)
+	case ViewMCPTargetSelect:
+		content = a.renderMCPTargetSelect(contentWidth)
 	}
 
 	// RGB animated border color
@@ -720,11 +841,22 @@ func (a *App) View() string {
 		BorderForeground(BorderColor).
 		Padding(0, 2).
 		Foreground(Muted).
+		Width(contentWidth).
+		Align(lipgloss.Center).
 		Render(help)
 
 	b.WriteString(helpBox)
 
-	return lipgloss.NewStyle().Padding(1, 2).Render(b.String())
+	// Center the entire UI horizontally and vertically
+	finalContent := b.String()
+
+	return lipgloss.Place(
+		a.width,
+		a.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		finalContent,
+	)
 }
 
 func (a *App) renderMainMenu(width int) string {
@@ -732,90 +864,71 @@ func (a *App) renderMainMenu(width int) string {
 
 	title := TitleStyle.Render("📦 Select Category")
 	b.WriteString(title)
-	b.WriteString("\n")
+	b.WriteString("\n\n")
 
-	// Calculate visible items based on terminal height
-	// Reserve space for header (~10 lines), footer (~5 lines), and description (2 lines)
-	reservedLines := 17
-	if a.height < 35 {
-		reservedLines = 12 // Compact mode needs less
+	// Calculate columns based on width
+	itemWidth := 25 // Width per item
+	numCols := width / itemWidth
+	if numCols < 2 {
+		numCols = 2
 	}
-	maxVisibleItems := a.height - reservedLines
-	if maxVisibleItems < 5 {
-		maxVisibleItems = 5
-	}
-	if maxVisibleItems > len(a.categoryItems) {
-		maxVisibleItems = len(a.categoryItems)
+	if numCols > 4 {
+		numCols = 4
 	}
 
-	// Update scroll offset to keep cursor visible
-	if a.cursor < a.scrollOffset {
-		a.scrollOffset = a.cursor
-	}
-	if a.cursor >= a.scrollOffset+maxVisibleItems {
-		a.scrollOffset = a.cursor - maxVisibleItems + 1
-	}
+	// Render items in grid
+	items := a.categoryItems
+	for row := 0; row < (len(items)+numCols-1)/numCols; row++ {
+		var rowItems []string
+		for col := 0; col < numCols; col++ {
+			idx := row*numCols + col
+			if idx >= len(items) {
+				// Empty cell for alignment
+				rowItems = append(rowItems, strings.Repeat(" ", itemWidth))
+				continue
+			}
 
-	// Show scroll indicator at top if needed
-	if a.scrollOffset > 0 {
-		b.WriteString(lipgloss.NewStyle().Foreground(Muted).Render("   ▲ scroll up for more\n"))
-	}
+			cat := items[idx]
+			icon := cat.icon
+			name := cat.title
 
-	// Render visible items with scrolling
-	endIdx := a.scrollOffset + maxVisibleItems
-	if endIdx > len(a.categoryItems) {
-		endIdx = len(a.categoryItems)
-	}
+			// Truncate name if needed
+			maxNameLen := itemWidth - 6
+			if len(name) > maxNameLen {
+				name = name[:maxNameLen-2] + ".."
+			}
 
-	for i := a.scrollOffset; i < endIdx; i++ {
-		cat := a.categoryItems[i]
-		icon := cat.icon
-		name := cat.title
-
-		// Truncate name if terminal is too narrow
-		maxNameLen := width - 10
-		if maxNameLen < 20 {
-			maxNameLen = 20
+			var cell string
+			if idx == a.cursor {
+				// Selected item
+				cell = lipgloss.NewStyle().
+					Background(Surface).
+					Foreground(Secondary).
+					Bold(true).
+					Width(itemWidth).
+					Render(fmt.Sprintf("▸ %s %s", icon, name))
+			} else {
+				// Normal item
+				cell = lipgloss.NewStyle().
+					Foreground(Foreground).
+					Width(itemWidth).
+					Render(fmt.Sprintf("  %s %s", icon, name))
+			}
+			rowItems = append(rowItems, cell)
 		}
-		if len(name) > maxNameLen {
-			name = name[:maxNameLen-3] + "..."
-		}
-
-		if i == a.cursor {
-			// Selected item - highlight
-			b.WriteString(lipgloss.NewStyle().
-				Background(Surface).
-				Foreground(Secondary).
-				Bold(true).
-				Render(fmt.Sprintf(" ▸ %s %s ", icon, name)))
-		} else {
-			// Normal item
-			b.WriteString(fmt.Sprintf("   %s %s", icon, name))
-		}
+		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, rowItems...))
 		b.WriteString("\n")
 	}
 
-	// Show scroll indicator at bottom if needed
-	if endIdx < len(a.categoryItems) {
-		b.WriteString(lipgloss.NewStyle().Foreground(Muted).Render("   ▼ scroll down for more\n"))
-	}
-
-	// Show description of selected item at bottom
+	// Show description of selected item
 	if a.cursor < len(a.categoryItems) {
 		desc := a.categoryItems[a.cursor].description
-		// Truncate description if too long
-		maxDescLen := width - 6
+		maxDescLen := width - 4
 		if len(desc) > maxDescLen {
 			desc = desc[:maxDescLen-3] + "..."
 		}
 		b.WriteString("\n")
-		b.WriteString(SubtitleStyle.Render(fmt.Sprintf("  → %s", desc)))
-	}
-
-	// Show scroll position indicator for large lists
-	if len(a.categoryItems) > maxVisibleItems {
-		scrollInfo := fmt.Sprintf(" [%d/%d]", a.cursor+1, len(a.categoryItems))
-		b.WriteString(lipgloss.NewStyle().Foreground(Muted).Render(scrollInfo))
+		b.WriteString(SubtitleStyle.Render(fmt.Sprintf("→ %s", desc)))
 	}
 
 	return b.String()
@@ -1719,13 +1832,235 @@ func (a *App) renderCloneSetupView(width int) string {
 	return b.String()
 }
 
-func createDelegate() list.DefaultDelegate {
-	delegate := list.NewDefaultDelegate()
-	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
-		Foreground(Secondary).
-		BorderLeftForeground(Secondary)
-	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
-		Foreground(Muted).
-		BorderLeftForeground(Secondary)
-	return delegate
+// executeMCPInstall installs MCP server to selected targets
+func (a *App) executeMCPInstall(targets []installers.MCPTarget) {
+	if a.selectedInstaller == nil {
+		a.output = "❌ No installer selected"
+		return
+	}
+
+	// Switch to installing view
+	a.installLog = nil
+	a.installRunning = true
+	a.installComplete = false
+	a.installError = nil
+	a.installStartTime = time.Now()
+
+	a.installLog = append(a.installLog, fmt.Sprintf("📦 Installing: %s", a.selectedInstaller.Name()))
+	a.installLog = append(a.installLog, "")
+	a.installLog = append(a.installLog, "🎯 Configuring for targets:")
+	for _, target := range targets {
+		a.installLog = append(a.installLog, fmt.Sprintf("   %s %s", target.Icon, target.Name))
+	}
+	a.installLog = append(a.installLog, "")
+
+	installerToRun := a.selectedInstaller
+
+	go func() {
+		// Detect OS
+		var osType installers.OS
+		switch runtime.GOOS {
+		case "darwin":
+			osType = installers.OSMacOS
+		case "windows":
+			osType = installers.OSWindows
+		default:
+			osType = installers.OSLinux
+		}
+
+		// Generate and run the MCP install script
+		script := installerToRun.GenerateInstallScript(osType, installers.PMNone)
+
+		a.installLog = append(a.installLog, "📜 Running install script...")
+		a.installLog = append(a.installLog, "")
+
+		// Write script to temp file and execute
+		var scriptPath string
+		var cmd *exec.Cmd
+
+		if runtime.GOOS == "windows" {
+			// Windows PowerShell
+			scriptPath = filepath.Join(os.TempDir(), "mcp_install.ps1")
+			if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
+				a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to create script: %v", err))
+				a.installRunning = false
+				a.installComplete = true
+				a.installError = err
+				return
+			}
+			cmd = exec.Command("powershell", "-ExecutionPolicy", "Bypass", "-File", scriptPath)
+		} else {
+			// Linux/macOS bash
+			scriptPath = filepath.Join(os.TempDir(), "mcp_install.sh")
+			if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
+				a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to create script: %v", err))
+				a.installRunning = false
+				a.installComplete = true
+				a.installError = err
+				return
+			}
+			cmd = exec.Command("bash", scriptPath)
+		}
+
+		// Get stdout pipe
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to capture stdout: %v", err))
+			a.installRunning = false
+			a.installComplete = true
+			a.installError = err
+			return
+		}
+
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to capture stderr: %v", err))
+			a.installRunning = false
+			a.installComplete = true
+			a.installError = err
+			return
+		}
+
+		// Start command
+		if err := cmd.Start(); err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to start script: %v", err))
+			a.installRunning = false
+			a.installComplete = true
+			a.installError = err
+			return
+		}
+
+		// Read stdout in goroutine
+		go func() {
+			scanner := bufio.NewScanner(stdout)
+			for scanner.Scan() {
+				line := scanner.Text()
+				a.installLog = append(a.installLog, "  "+line)
+				if len(a.installLog) > 100 {
+					a.installLog = a.installLog[len(a.installLog)-100:]
+				}
+			}
+		}()
+
+		// Read stderr
+		go func() {
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				line := scanner.Text()
+				a.installLog = append(a.installLog, "  "+line)
+			}
+		}()
+
+		// Wait for completion
+		err = cmd.Wait()
+
+		// Clean up
+		os.Remove(scriptPath)
+
+		if err != nil {
+			a.installLog = append(a.installLog, "")
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Installation failed: %v", err))
+			a.installError = err
+		} else {
+			a.installLog = append(a.installLog, "")
+			a.installLog = append(a.installLog, fmt.Sprintf("✅ Successfully installed %s!", a.selectedInstaller.Name()))
+			a.installLog = append(a.installLog, "")
+			a.installLog = append(a.installLog, "🎉 Restart your IDE/CLI to use the MCP server.")
+		}
+
+		a.installRunning = false
+		a.installComplete = true
+	}()
+}
+
+// renderMCPTargetSelect renders the MCP target selection view
+func (a *App) renderMCPTargetSelect(_ int) string {
+	var b strings.Builder
+
+	// Back breadcrumb
+	backStyle := lipgloss.NewStyle().Foreground(Muted)
+	b.WriteString(backStyle.Render("← Back (backspace)"))
+	b.WriteString("\n\n")
+
+	title := TitleStyle.Render(fmt.Sprintf("📦 Install %s", a.selectedInstaller.Name()))
+	b.WriteString(title)
+	b.WriteString("\n\n")
+
+	b.WriteString(SubtitleStyle.Render("Select where to install MCP server:"))
+	b.WriteString("\n\n")
+
+	if len(a.mcpTargets) == 0 {
+		b.WriteString("❌ No IDE or AI CLI detected.\n")
+		b.WriteString("Install an IDE (Cursor, VS Code, Windsurf) or\n")
+		b.WriteString("an AI CLI tool (Claude, Gemini, OpenCode) first.")
+		return b.String()
+	}
+
+	// Group targets by type
+	ideTargets := []int{}
+	cliTargets := []int{}
+	for i, t := range a.mcpTargets {
+		if t.Type == "ide" {
+			ideTargets = append(ideTargets, i)
+		} else {
+			cliTargets = append(cliTargets, i)
+		}
+	}
+
+	renderTarget := func(idx int) string {
+		target := a.mcpTargets[idx]
+		checkbox := "[ ]"
+		if a.mcpSelectedIdx[idx] {
+			checkbox = "[✓]"
+		}
+
+		cursor := "  "
+		style := lipgloss.NewStyle().Foreground(Foreground)
+		if idx == a.cursor {
+			cursor = "▸ "
+			style = lipgloss.NewStyle().Background(Surface).Foreground(Secondary).Bold(true)
+		}
+
+		line := fmt.Sprintf("%s%s %s %s", cursor, checkbox, target.Icon, target.Name)
+		return style.Render(line)
+	}
+
+	// Render IDEs section
+	if len(ideTargets) > 0 {
+		b.WriteString(lipgloss.NewStyle().Foreground(Primary).Bold(true).Render("💻 IDEs"))
+		b.WriteString("\n")
+		for _, idx := range ideTargets {
+			b.WriteString(renderTarget(idx))
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
+
+	// Render CLI tools section
+	if len(cliTargets) > 0 {
+		b.WriteString(lipgloss.NewStyle().Foreground(Primary).Bold(true).Render("🤖 AI CLI Tools"))
+		b.WriteString("\n")
+		for _, idx := range cliTargets {
+			b.WriteString(renderTarget(idx))
+			b.WriteString("\n")
+		}
+	}
+
+	// Selected count
+	selectedCount := 0
+	for _, sel := range a.mcpSelectedIdx {
+		if sel {
+			selectedCount++
+		}
+	}
+	b.WriteString("\n")
+	b.WriteString(fmt.Sprintf("Selected: %d/%d targets", selectedCount, len(a.mcpTargets)))
+	b.WriteString("\n\n")
+
+	// Controls
+	controls := lipgloss.NewStyle().Foreground(Muted).Render(
+		"[SPACE] Toggle • [a] Select/Deselect All • [i] Install • [backspace] Back")
+	b.WriteString(controls)
+
+	return b.String()
 }

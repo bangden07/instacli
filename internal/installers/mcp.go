@@ -3,12 +3,186 @@ package installers
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 )
 
-// IDEType represents detected IDE
+// MCPTarget represents an IDE or CLI tool that can use MCP
+type MCPTarget struct {
+	Name       string
+	Icon       string
+	ConfigPath string
+	Installed  bool
+	Type       string // "ide" or "cli"
+}
+
+// DetectAllMCPTargets detects all available IDEs and CLI tools for MCP installation
+func DetectAllMCPTargets() []MCPTarget {
+	home, _ := os.UserHomeDir()
+	var targets []MCPTarget
+
+	// ========== IDEs ==========
+
+	// Cursor
+	cursorPath := filepath.Join(home, ".cursor")
+	if _, err := os.Stat(cursorPath); err == nil {
+		targets = append(targets, MCPTarget{
+			Name:       "Cursor",
+			Icon:       "🖱️",
+			ConfigPath: filepath.Join(cursorPath, "mcp.json"),
+			Installed:  true,
+			Type:       "ide",
+		})
+	}
+
+	// VS Code
+	var vscodePath string
+	if runtime.GOOS == "windows" {
+		vscodePath = filepath.Join(home, "AppData", "Roaming", "Code", "User")
+	} else if runtime.GOOS == "darwin" {
+		vscodePath = filepath.Join(home, "Library", "Application Support", "Code", "User")
+	} else {
+		vscodePath = filepath.Join(home, ".config", "Code", "User")
+	}
+	if _, err := os.Stat(vscodePath); err == nil {
+		targets = append(targets, MCPTarget{
+			Name:       "VS Code",
+			Icon:       "💻",
+			ConfigPath: filepath.Join(vscodePath, "mcp.json"),
+			Installed:  true,
+			Type:       "ide",
+		})
+	}
+
+	// Windsurf
+	windsurfPath := filepath.Join(home, ".windsurf")
+	if _, err := os.Stat(windsurfPath); err == nil {
+		targets = append(targets, MCPTarget{
+			Name:       "Windsurf",
+			Icon:       "🏄",
+			ConfigPath: filepath.Join(windsurfPath, "mcp.json"),
+			Installed:  true,
+			Type:       "ide",
+		})
+	}
+
+	// Zed (Linux/Mac only)
+	if runtime.GOOS != "windows" {
+		zedPath := filepath.Join(home, ".config", "zed")
+		if _, err := os.Stat(zedPath); err == nil {
+			targets = append(targets, MCPTarget{
+				Name:       "Zed",
+				Icon:       "⚡",
+				ConfigPath: filepath.Join(zedPath, "mcp.json"),
+				Installed:  true,
+				Type:       "ide",
+			})
+		}
+	}
+
+	// ========== AI CLI Tools ==========
+
+	// Claude Desktop
+	var claudePath string
+	if runtime.GOOS == "windows" {
+		claudePath = filepath.Join(os.Getenv("APPDATA"), "Claude")
+	} else if runtime.GOOS == "darwin" {
+		claudePath = filepath.Join(home, "Library", "Application Support", "Claude")
+	} else {
+		claudePath = filepath.Join(home, ".config", "claude")
+	}
+	if _, err := os.Stat(claudePath); err == nil {
+		targets = append(targets, MCPTarget{
+			Name:       "Claude Desktop",
+			Icon:       "🤖",
+			ConfigPath: filepath.Join(claudePath, "claude_desktop_config.json"),
+			Installed:  true,
+			Type:       "cli",
+		})
+	}
+
+	// Claude CLI (check if command exists)
+	if _, err := exec.LookPath("claude"); err == nil {
+		targets = append(targets, MCPTarget{
+			Name:       "Claude CLI",
+			Icon:       "🔮",
+			ConfigPath: filepath.Join(home, ".claude", "mcp.json"),
+			Installed:  true,
+			Type:       "cli",
+		})
+	}
+
+	// Gemini CLI
+	geminiPath := filepath.Join(home, ".gemini")
+	if _, err := os.Stat(geminiPath); err == nil {
+		targets = append(targets, MCPTarget{
+			Name:       "Gemini CLI",
+			Icon:       "💎",
+			ConfigPath: filepath.Join(geminiPath, "settings.json"),
+			Installed:  true,
+			Type:       "cli",
+		})
+	} else if _, err := exec.LookPath("gemini"); err == nil {
+		targets = append(targets, MCPTarget{
+			Name:       "Gemini CLI",
+			Icon:       "💎",
+			ConfigPath: filepath.Join(home, ".gemini", "settings.json"),
+			Installed:  true,
+			Type:       "cli",
+		})
+	}
+
+	// OpenCode CLI
+	if _, err := exec.LookPath("opencode"); err == nil {
+		targets = append(targets, MCPTarget{
+			Name:       "OpenCode",
+			Icon:       "💻",
+			ConfigPath: filepath.Join(home, ".opencode", "mcp.json"),
+			Installed:  true,
+			Type:       "cli",
+		})
+	}
+
+	// Aider
+	if _, err := exec.LookPath("aider"); err == nil {
+		targets = append(targets, MCPTarget{
+			Name:       "Aider",
+			Icon:       "🔧",
+			ConfigPath: filepath.Join(home, ".aider", "mcp.json"),
+			Installed:  true,
+			Type:       "cli",
+		})
+	}
+
+	// Cline (VS Code extension - check for extension directory)
+	var extensionsPath string
+	if runtime.GOOS == "windows" {
+		extensionsPath = filepath.Join(home, ".vscode", "extensions")
+	} else {
+		extensionsPath = filepath.Join(home, ".vscode", "extensions")
+	}
+	if entries, err := os.ReadDir(extensionsPath); err == nil {
+		for _, entry := range entries {
+			if strings.HasPrefix(entry.Name(), "saoudrizwan.claude-dev") ||
+				strings.HasPrefix(entry.Name(), "rooveterinaryinc.roo-cline") {
+				targets = append(targets, MCPTarget{
+					Name:       "Cline/Roo (VS Code)",
+					Icon:       "🦊",
+					ConfigPath: filepath.Join(home, ".vscode", "mcp.json"),
+					Installed:  true,
+					Type:       "ide",
+				})
+				break
+			}
+		}
+	}
+
+	return targets
+}
+
+// IDEType represents detected IDE (legacy, kept for compatibility)
 type IDEType string
 
 const (
@@ -19,9 +193,8 @@ const (
 	IDEUnknown  IDEType = "unknown"
 )
 
-// DetectIDE tries to detect which IDE is being used
+// DetectIDE tries to detect which IDE is being used (legacy)
 func DetectIDE() IDEType {
-	// Check environment variables first
 	if os.Getenv("VSCODE_PID") != "" || os.Getenv("VSCODE_IPC_HOOK") != "" {
 		return IDEVSCode
 	}
@@ -31,21 +204,13 @@ func DetectIDE() IDEType {
 
 	home, _ := os.UserHomeDir()
 
-	// Check for config directories
-	if runtime.GOOS == "windows" {
-		if _, err := os.Stat(filepath.Join(home, ".cursor")); err == nil {
-			return IDECursor
-		}
-		if _, err := os.Stat(filepath.Join(home, ".windsurf")); err == nil {
-			return IDEWindsurf
-		}
-	} else {
-		if _, err := os.Stat(filepath.Join(home, ".cursor")); err == nil {
-			return IDECursor
-		}
-		if _, err := os.Stat(filepath.Join(home, ".windsurf")); err == nil {
-			return IDEWindsurf
-		}
+	if _, err := os.Stat(filepath.Join(home, ".cursor")); err == nil {
+		return IDECursor
+	}
+	if _, err := os.Stat(filepath.Join(home, ".windsurf")); err == nil {
+		return IDEWindsurf
+	}
+	if runtime.GOOS != "windows" {
 		if _, err := os.Stat(filepath.Join(home, ".config", "zed")); err == nil {
 			return IDEZed
 		}
