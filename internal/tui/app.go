@@ -92,6 +92,8 @@ type App struct {
 	output            string
 	hue               float64 // For RGB animation (0-360)
 	repoURL           textinput.Model
+	repoTargetDir     textinput.Model
+	repoStep          int // 0=URL input, 1=target dir input, 2=cloning
 	detectedProject   *executor.ProjectInfo
 	// Installation progress
 	installLog       []string
@@ -170,6 +172,12 @@ func NewApp() *App {
 	repoURL.CharLimit = 200
 	repoURL.Width = 50
 
+	// Target directory input
+	repoTargetDir := textinput.New()
+	repoTargetDir.Placeholder = "/var/www/myproject"
+	repoTargetDir.CharLimit = 200
+	repoTargetDir.Width = 50
+
 	return &App{
 		currentView:   ViewMain,
 		targetMode:    TargetLocal,
@@ -183,6 +191,8 @@ func NewApp() *App {
 		sshUser:       sshUser,
 		sshPass:       sshPass,
 		repoURL:       repoURL,
+		repoTargetDir: repoTargetDir,
+		repoStep:      0,
 		width:         100, // Default width, will be updated by WindowSizeMsg
 		height:        40,  // Default height, will be updated by WindowSizeMsg
 	}
@@ -330,24 +340,74 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Handle Clone & Setup text input
+		// Handle Clone & Setup text input - 2-step flow
 		if a.currentView == ViewCloneSetup {
 			switch msg.String() {
 			case "esc":
-				a.currentView = ViewMain
-				a.cursor = 0
-				a.repoURL.Blur()
+				if a.repoStep > 0 {
+					// Go back to previous step
+					a.repoStep--
+					if a.repoStep == 0 {
+						a.repoTargetDir.Blur()
+						a.repoURL.Focus()
+					}
+				} else {
+					// Exit to main menu
+					a.currentView = ViewMain
+					a.cursor = 0
+					a.repoURL.Blur()
+					a.repoURL.SetValue("")
+					a.repoTargetDir.SetValue("")
+				}
 				return a, nil
 			case "enter":
-				// Process the URL - just show message for now
-				if a.repoURL.Value() != "" {
-					a.output = "📥 Processing: " + a.repoURL.Value()
+				if a.repoStep == 0 {
+					// Step 0: URL entered, move to target dir input
+					if a.repoURL.Value() != "" {
+						a.repoStep = 1
+						a.repoURL.Blur()
+						a.repoTargetDir.Focus()
+						// Set default target dir based on repo name
+						_, repoName, _ := executor.ParseRepoURL(a.repoURL.Value())
+						if repoName != "" {
+							a.repoTargetDir.SetValue("/var/www/" + repoName)
+						}
+					}
+				} else if a.repoStep == 1 {
+					// Step 1: Target dir entered, start cloning
+					if a.repoTargetDir.Value() != "" {
+						a.repoStep = 2
+						a.repoTargetDir.Blur()
+						// Switch to install view and start cloning
+						a.currentView = ViewInstalling
+						go a.executeRepoSetup(a.repoURL.Value(), a.repoTargetDir.Value())
+					}
+				}
+				return a, nil
+			case "tab":
+				// Toggle between URL and target dir inputs
+				if a.repoStep == 0 && a.repoURL.Value() != "" {
+					a.repoStep = 1
+					a.repoURL.Blur()
+					a.repoTargetDir.Focus()
+					_, repoName, _ := executor.ParseRepoURL(a.repoURL.Value())
+					if repoName != "" && a.repoTargetDir.Value() == "" {
+						a.repoTargetDir.SetValue("/var/www/" + repoName)
+					}
+				} else if a.repoStep == 1 {
+					a.repoStep = 0
+					a.repoTargetDir.Blur()
+					a.repoURL.Focus()
 				}
 				return a, nil
 			default:
-				// Forward to textinput (includes backspace)
+				// Forward to active textinput
 				var cmd tea.Cmd
-				a.repoURL, cmd = a.repoURL.Update(msg)
+				if a.repoStep == 0 {
+					a.repoURL, cmd = a.repoURL.Update(msg)
+				} else {
+					a.repoTargetDir, cmd = a.repoTargetDir.Update(msg)
+				}
 				return a, cmd
 			}
 		}
@@ -1783,18 +1843,51 @@ func (a *App) renderCloneSetupView(width int) string {
 	b.WriteString(TitleStyle.Render("📥 Clone & Setup Repository"))
 	b.WriteString("\n\n")
 
-	b.WriteString(SubtitleStyle.Render("Paste a Git repository URL to automatically clone and setup:"))
+	// Step indicator
+	var stepText string
+	if a.repoStep == 0 {
+		stepText = "[1] Repository URL → [2] Target Directory"
+	} else {
+		stepText = "[1] Repository URL → [2] Target Directory ✓"
+	}
+	b.WriteString(HelpStyle.Render(stepText))
 	b.WriteString("\n\n")
 
-	// URL input field
 	inputStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(Primary).
 		Padding(0, 1).
 		Width(width - 10)
 
-	b.WriteString(inputStyle.Render(a.repoURL.View()))
+	inputStyleInactive := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("240")).
+		Padding(0, 1).
+		Width(width - 10)
+
+	// Step 1: URL Input
+	if a.repoStep == 0 {
+		b.WriteString(SubtitleStyle.Render("Step 1: Repository URL"))
+		b.WriteString("\n")
+		b.WriteString(inputStyle.Render(a.repoURL.View()))
+	} else {
+		b.WriteString(SuccessStyle.Render("✅ Step 1: " + a.repoURL.Value()))
+		b.WriteString("\n")
+	}
 	b.WriteString("\n\n")
+
+	// Step 2: Target Directory
+	if a.repoStep >= 1 {
+		b.WriteString(SubtitleStyle.Render("Step 2: Target Directory"))
+		b.WriteString("\n")
+		b.WriteString(inputStyle.Render(a.repoTargetDir.View()))
+		b.WriteString("\n\n")
+	} else {
+		b.WriteString(HelpStyle.Render("Step 2: Target Directory"))
+		b.WriteString("\n")
+		b.WriteString(inputStyleInactive.Render("(Enter URL first)"))
+		b.WriteString("\n\n")
+	}
 
 	// Supported project types
 	b.WriteString(SubtitleStyle.Render("✨ Auto-detected project types:"))
@@ -1820,16 +1913,131 @@ func (a *App) renderCloneSetupView(width int) string {
 
 	b.WriteString("\n")
 
-	// Show detected project if available
-	if a.detectedProject != nil {
-		b.WriteString(SuccessStyle.Render("Detected: " + a.detectedProject.Framework))
-		b.WriteString("\n")
+	// Help text based on step
+	if a.repoStep == 0 {
+		b.WriteString(HelpStyle.Render("Enter URL and press Enter to continue, Tab to jump to Step 2, Esc to go back"))
+	} else {
+		b.WriteString(HelpStyle.Render("Press Enter to start cloning, Tab to go back, Esc to cancel"))
 	}
 
-	b.WriteString("\n")
-	b.WriteString(HelpStyle.Render("Press Enter to clone & setup, Esc to go back"))
-
 	return b.String()
+}
+
+// executeRepoSetup clones a repository and runs project setup
+func (a *App) executeRepoSetup(repoURL, targetDir string) {
+	// Initialize install progress
+	a.installLog = nil
+	a.installRunning = true
+	a.installComplete = false
+	a.installError = nil
+	a.installStartTime = time.Now()
+
+	a.installLog = append(a.installLog, "📥 Clone & Setup Repository")
+	a.installLog = append(a.installLog, "")
+	a.installLog = append(a.installLog, fmt.Sprintf("🔗 Repository: %s", repoURL))
+	a.installLog = append(a.installLog, fmt.Sprintf("📁 Target: %s", targetDir))
+	a.installLog = append(a.installLog, "")
+
+	// Generate clone script
+	cloneScript := executor.GenerateCloneScript(repoURL, targetDir)
+
+	// Run the clone script
+	a.installLog = append(a.installLog, "⏳ Cloning repository...")
+
+	var cmd *exec.Cmd
+	var scriptPath string
+
+	if a.targetMode == TargetSSH && a.sshHost.Value() != "" {
+		// Remote execution via SSH
+		sshCmd := fmt.Sprintf("ssh -o StrictHostKeyChecking=no -p %s %s@%s 'bash -s'",
+			a.sshPort.Value(), a.sshUser.Value(), a.sshHost.Value())
+		cmd = exec.Command("bash", "-c", fmt.Sprintf("echo '%s' | %s", cloneScript, sshCmd))
+	} else {
+		// Local execution
+		scriptPath = filepath.Join(os.TempDir(), "repo_clone.sh")
+		if err := os.WriteFile(scriptPath, []byte(cloneScript), 0755); err != nil {
+			a.installLog = append(a.installLog, fmt.Sprintf("❌ Failed to create script: %v", err))
+			a.installRunning = false
+			a.installComplete = true
+			a.installError = err
+			return
+		}
+		cmd = exec.Command("bash", scriptPath)
+	}
+
+	// Capture output
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		a.installLog = append(a.installLog, "")
+		a.installLog = append(a.installLog, "❌ Clone failed:")
+		a.installLog = append(a.installLog, string(output))
+		a.installLog = append(a.installLog, fmt.Sprintf("Error: %v", err))
+		a.installRunning = false
+		a.installComplete = true
+		a.installError = err
+		return
+	}
+
+	// Add output to log
+	for _, line := range strings.Split(string(output), "\n") {
+		if line != "" {
+			a.installLog = append(a.installLog, line)
+		}
+	}
+
+	// Detect project type and run setup
+	a.installLog = append(a.installLog, "")
+	a.installLog = append(a.installLog, "🔍 Detecting project type...")
+
+	repoSetup := executor.NewRepoSetup(repoURL, targetDir)
+	projectInfo, err := repoSetup.DetectProject()
+	if err == nil && projectInfo.Type != executor.ProjectUnknown {
+		a.detectedProject = projectInfo
+		a.installLog = append(a.installLog, fmt.Sprintf("✅ Detected: %s (%s)", projectInfo.Framework, projectInfo.Type))
+
+		if projectInfo.PackageManager != "" {
+			a.installLog = append(a.installLog, fmt.Sprintf("📦 Package Manager: %s", projectInfo.PackageManager))
+		}
+
+		// Generate and run setup script
+		a.installLog = append(a.installLog, "")
+		a.installLog = append(a.installLog, "⏳ Running project setup...")
+
+		setupScript := repoSetup.GenerateSetupScript()
+		if a.targetMode == TargetSSH && a.sshHost.Value() != "" {
+			sshCmd := fmt.Sprintf("ssh -o StrictHostKeyChecking=no -p %s %s@%s 'bash -s'",
+				a.sshPort.Value(), a.sshUser.Value(), a.sshHost.Value())
+			cmd = exec.Command("bash", "-c", fmt.Sprintf("echo '%s' | %s", setupScript, sshCmd))
+		} else {
+			scriptPath = filepath.Join(os.TempDir(), "repo_setup.sh")
+			os.WriteFile(scriptPath, []byte(setupScript), 0755)
+			cmd = exec.Command("bash", scriptPath)
+		}
+
+		output, _ = cmd.CombinedOutput()
+		for _, line := range strings.Split(string(output), "\n") {
+			if line != "" {
+				a.installLog = append(a.installLog, line)
+			}
+		}
+	} else {
+		a.installLog = append(a.installLog, "ℹ️ Unknown project type - skipping auto-setup")
+	}
+
+	// Success message
+	a.installLog = append(a.installLog, "")
+	a.installLog = append(a.installLog, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	a.installLog = append(a.installLog, "✅ Repository cloned successfully!")
+	a.installLog = append(a.installLog, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	a.installLog = append(a.installLog, "")
+	a.installLog = append(a.installLog, fmt.Sprintf("📁 Location: %s", targetDir))
+	a.installLog = append(a.installLog, "")
+	a.installLog = append(a.installLog, "To access your project:")
+	a.installLog = append(a.installLog, fmt.Sprintf("   cd %s", targetDir))
+	a.installLog = append(a.installLog, "")
+
+	a.installRunning = false
+	a.installComplete = true
 }
 
 // executeMCPInstall installs MCP server to selected targets
