@@ -260,7 +260,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 
-		case "esc", "backspace":
+		case "esc":
 			switch a.currentView {
 			case ViewCategory:
 				a.currentView = ViewMain
@@ -283,6 +283,44 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.currentView = ViewMain
 				a.cursor = 0
 				a.repoURL.Blur()
+			}
+			return a, nil
+
+		case "backspace":
+			// Don't go back if editing text - let the textinput handle backspace
+			if a.currentView == ViewSettings && a.editingSSH {
+				// Forward to text input (handled in default case)
+				var cmd tea.Cmd
+				switch a.focusedInput {
+				case 0:
+					a.sshHost, cmd = a.sshHost.Update(msg)
+				case 1:
+					a.sshPort, cmd = a.sshPort.Update(msg)
+				case 2:
+					a.sshUser, cmd = a.sshUser.Update(msg)
+				case 3:
+					a.sshPass, cmd = a.sshPass.Update(msg)
+				}
+				return a, cmd
+			}
+			if a.currentView == ViewCloneSetup {
+				var cmd tea.Cmd
+				a.repoURL, cmd = a.repoURL.Update(msg)
+				return a, cmd
+			}
+			// Normal back navigation
+			switch a.currentView {
+			case ViewCategory:
+				a.currentView = ViewMain
+				a.cursor = 0
+			case ViewInstaller:
+				a.currentView = ViewCategory
+			case ViewSettings:
+				a.currentView = ViewMain
+				a.cursor = 0
+			case ViewSystemStatus, ViewHelp, ViewCloneSetup:
+				a.currentView = ViewMain
+				a.cursor = 0
 			}
 			return a, nil
 
