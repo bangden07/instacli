@@ -26,6 +26,8 @@
 - [[CI CD]]
 - [[Security]]
 - [[CMS]]
+- [[AI CLI]]
+- [[MCP Servers]]
 
 ## Development
 

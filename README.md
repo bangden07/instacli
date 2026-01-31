@@ -48,6 +48,8 @@ Install your favorite AI coding assistants:
 | **Aider** | AI pair programming assistant |
 | **Kilo Code** | VS Code AI extension |
 | **Continue** | Open-source AI assistant |
+| **OpenCode CLI** | Open-source AI coding CLI |
+
 
 ### 📦 MCP Servers (NEW in v1.3.0)
 
